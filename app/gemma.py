@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import logging
 import os
+import re
 import time
 from typing import TypeVar
 
@@ -98,6 +99,26 @@ def _log(entry: dict) -> None:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+_DMY = re.compile(r"^\s*(\d{1,2})[./-](\d{1,2})[./-](\d{4})\s*$")
+
+
+def _iso_dates(obj):
+    """Gemma sometimes writes dates as dd/mm/yyyy or dd.mm.yyyy (how farmers say them); store ISO."""
+    if isinstance(obj, list):
+        return [_iso_dates(v) for v in obj]
+    if not isinstance(obj, dict):
+        return obj
+    out = {k: _iso_dates(v) for k, v in obj.items()}
+    m = _DMY.match(out["date"]) if isinstance(out.get("date"), str) else None
+    if m:
+        day, month, year = (int(g) for g in m.groups())
+        try:
+            out["date"] = dt.date(year, month, day).isoformat()
+        except ValueError:
+            pass  # not a real date: leave it, validation rejects it
+    return out
+
+
 def _parse(text: str, schema: type[M]) -> M:
     """The first JSON object in the reply, ignoring fences or text around it (Gemma sometimes adds
     a stray ``` even in JSON mode). Raises ValidationError if there is no valid object."""
@@ -105,7 +126,7 @@ def _parse(text: str, schema: type[M]) -> M:
     if start >= 0:
         try:
             obj, _ = json.JSONDecoder().raw_decode(text, start)
-            return schema.model_validate(obj)
+            return schema.model_validate(_iso_dates(obj))
         except json.JSONDecodeError:
             pass
     return schema.model_validate_json(text.strip())

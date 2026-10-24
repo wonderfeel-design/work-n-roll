@@ -174,6 +174,25 @@ def test_parse_tolerates_text_around_json(raw):
     assert r.records[0].parcel_alias == "P3"
 
 
+@pytest.mark.parametrize("raw_date,want", [("24/10/2026", "2026-10-24"), ("24.10.2026", "2026-10-24"),
+                                           ("3-1-2026", "2026-01-03"), ("2026-10-24", "2026-10-24")])
+def test_day_month_year_dates_become_iso(monkeypatch, raw_date, want):
+    monkeypatch.setattr(gemma, "_generate", lambda *a: _answer(date=raw_date))
+    assert gemma.extract("x", None, 1).records[0].date == want
+
+
+def test_merge_accepts_day_month_year_date(monkeypatch):
+    cur = Extracted(lang="en", activity_key="irrigation", parcel_alias="P3", quantity=20, unit="L")
+    monkeypatch.setattr(gemma, "_generate", lambda *a: json.dumps(cur.model_dump() | {"date": "24/10/2026"}))
+    assert gemma.merge(cur, "today").date == "2026-10-24"
+
+
+def test_impossible_date_still_rejected(monkeypatch):
+    monkeypatch.setattr(gemma, "_generate", lambda *a: _answer(date="31/02/2026"))
+    with pytest.raises(gemma.GemmaError):
+        gemma.extract("x", None, 1)
+
+
 def test_all_attempts_fail(monkeypatch):
     monkeypatch.setattr(gemma, "_generate", lambda *a: "nope")
     with pytest.raises(gemma.GemmaError):
