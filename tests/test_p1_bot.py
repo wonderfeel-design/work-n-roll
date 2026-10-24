@@ -217,3 +217,22 @@ def test_expert_change_message_once():
     db.update_field(rid, "quantity", 14, reason="catorce", by="agronomist")
     assert b.expert_changes(seen) == [(CHAT, "Tu técnico ha cambiado Cantidad: 40 → 14")]
     assert b.expert_changes(seen) == []
+
+
+def test_failed_transcription_answers_not_understood(env, monkeypatch, tmp_path):
+    bot, state = env
+
+    def boom(path):
+        raise RuntimeError("Scribe failed")
+
+    async def download(media, destination):
+        pass
+
+    monkeypatch.setattr(b, "transcribe", boom)
+    monkeypatch.setattr(b, "AUDIO_DIR", tmp_path)
+    bot.download = download
+    msg = FakeMessage(bot, None)
+    msg.voice = object()
+    run(b.on_note(msg, bot, state))
+    assert bot.sent[-1][1] == db.ui("not_understood", "en")
+    assert db.list_records() == []

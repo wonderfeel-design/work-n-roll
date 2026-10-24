@@ -20,10 +20,7 @@ from aiogram.utils.chat_action import ChatActionSender
 from app import DATA_DIR, db, gemma, validator
 from app.schemas import LANGS, Extracted, Record
 
-try:
-    from app.voice import speak, transcribe
-except ImportError:
-    from app.voice_stub import speak, transcribe   # TODO(P2): remove when voice.py lands
+from app.voice import speak, transcribe
 
 log = logging.getLogger(__name__)
 router = Router()
@@ -155,7 +152,11 @@ async def message_text(message: Message, bot: Bot) -> tuple[str, str | None]:
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         path = AUDIO_DIR / f"{message.chat.id}_{message.message_id}.oga"
         await bot.download(media, destination=path)
-        result = await asyncio.to_thread(transcribe, str(path))
+        try:
+            result = await asyncio.to_thread(transcribe, str(path))
+        except Exception:       # VoiceError: Scribe failed → caller answers "not understood"
+            log.exception("transcribe failed")
+            return "", None
         return (result.get("text") or "").strip(), result.get("lang")
     return (message.text or "").strip(), None
 
