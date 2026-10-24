@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Field Voice · Agronomist console</title>
+<title>Work'n'Roll · Epic Reporting</title>
+<link rel="icon" type="image/png" sizes="64x64" href="static/favicon-64.png">
+<link rel="apple-touch-icon" href="static/icon-512.png">
 <style>
   :root {
     --bg: #f4f1e8; --card: #fbf9f3; --ink: #1f2a1c; --muted: #5d6656; --line: #d6d0bd; --hover: #efe9d8;
@@ -27,7 +29,9 @@
   button, select, input { font: inherit; color: inherit; }
   header { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between;
            padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
-  h1 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+  h1 { margin: 0; font-size: 19px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
+  h1 .logo { width: 38px; height: 38px; flex: none; }
+  @media (prefers-color-scheme: dark) { h1 .logo { filter: invert(1); } }  /* black line art turns white */
   h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
   .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .btn { border: 1px solid var(--line); background: var(--card); padding: 6px 12px; border-radius: 6px;
@@ -165,7 +169,7 @@
 </head>
 <body>
 <header>
-  <h1>Field Voice <small id="subtitle"></small></h1>
+  <h1><img class="logo" src="static/logo.png" alt="" width="38" height="38">Work'n'Roll <small id="subtitle"></small></h1>
   <div class="bar">
     <span class="live" id="live"></span>
     <button class="btn" id="review" aria-pressed="false"></button>
@@ -204,10 +208,10 @@
 <div id="toast" role="status"></div>
 
 <script>
-// Agronomist console (Person 2, Task 4). Talks only to /api/* on this server; the browser reuses the login.
+// Work'n'Roll · Epic Reporting, the agronomist console (Person 2, Task 4). Talks only to /api/* on this server; the browser reuses the login.
 const T = {
   ca: {
-    subtitle: "Consola de l'agrònom", live: "en directe", paused: "en pausa (corregint)", offline: "sense connexió",
+    subtitle: "Epic Reporting", live: "en directe", paused: "en pausa (corregint)", offline: "sense connexió",
     review: "Només pendents", report: "Descarrega l'informe", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
     emptyReview: "Res pendent de revisió.", corrTitle: "El que aprèn el model", noCorr: "Encara no hi ha correccions.",
     cols: ["Data", "Pagès", "Parcel·la", "Cultiu", "Activitat", "Producte", "Quantitat", "Dosi/ha",
@@ -225,7 +229,7 @@ const T = {
               notes_ca: "Notes (CA)", notes_en: "Notes (EN)" },
   },
   en: {
-    subtitle: "Agronomist console", live: "live", paused: "paused (correcting)", offline: "offline",
+    subtitle: "Epic Reporting", live: "live", paused: "paused (correcting)", offline: "offline",
     review: "Needs review only", report: "Download report", empty: "No records yet. Send a voice note to the bot.",
     emptyReview: "Nothing needs review.", corrTitle: "What the model learns from", noCorr: "No corrections yet.",
     cols: ["Date", "Farmer", "Parcel", "Crop", "Activity", "Product", "Quantity", "Dose/ha",
