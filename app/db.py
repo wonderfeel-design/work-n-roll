@@ -221,6 +221,17 @@ def update_status(id: int, status: str, by: str | None = None) -> None:
         conn.execute(f"UPDATE field_log SET {', '.join(sets)} WHERE id = ?", (*args, id))
 
 
+def set_judge(id: int, score: float, reason: str) -> None:
+    """Store the validator's judge_score (0-1) and one-line judge_reason. Not a correction."""
+    if not 0.0 <= score <= 1.0:
+        raise ValueError("judge_score must be between 0 and 1")
+    with _connect() as conn:
+        cur = conn.execute("UPDATE field_log SET judge_score = ?, judge_reason = ?, updated_at = ? WHERE id = ?",
+                           (score, reason, _now(), id))
+        if cur.rowcount == 0:
+            raise KeyError(f"no record {id}")
+
+
 def update_field(id: int, field: str, value: Any, reason: str, by: str,
                  reason_lang: str | None = None) -> None:
     """Change one field and log it to corrections in the same transaction.
