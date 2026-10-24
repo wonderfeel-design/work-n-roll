@@ -1,4 +1,4 @@
-# SA.TECH Field Voice
+# WORK'n'Roll Field Voice logger
 
 **Farmers talk, the field log fills itself.** A farmer sends a Telegram voice note in English, Russian, Catalan or Spanish. ElevenLabs Scribe transcribes it, Gemma 4 turns it into a structured field record (CUE-style: treatments, fertilisation, irrigation, harvest, labour), a validator scores it, and the bot reads it back in the farmer's language for confirmation. An agronomist reviews and corrects records on a web console, and every correction becomes a few-shot example, so the extractor and the judge learn from the expert. The log exports to Excel in the same layout as the sample sheet.
 
