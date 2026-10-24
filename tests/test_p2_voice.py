@@ -9,9 +9,15 @@ import subprocess
 
 import pytest
 
-from app import DATA_DIR, db, voice
+from app import DATA_DIR, db, seed, voice
 
 NOTES = DATA_DIR / "test_notes"
+
+
+@pytest.fixture(autouse=True)
+def reference_data(pg_schema):
+    """Parcels, vocabulary and UI strings: keyterms and the spoken sentences come from them."""
+    seed.seed()
 
 
 @pytest.mark.parametrize("code, lang", [

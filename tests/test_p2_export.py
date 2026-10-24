@@ -11,7 +11,6 @@ from app.schemas import Record
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
     seed.seed()
 

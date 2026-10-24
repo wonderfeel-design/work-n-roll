@@ -74,6 +74,10 @@ AGRONOMIST_CHAT_ID=        # optional, for review notifications
 > - **No sample data is imported.** `seed.py` loads only `Parcels_DUN`, `Vocabulary` and `UI_Strings`; the workbook's `Field_Log` and `Corrections` rows are format examples. There is no `--with-sample-log`.
 > - Extra helpers: `get_farmer`, `set_farmer_name`, `label(type, key, lang)` (vocabulary label), `corrections_for(record_id)`, `set_fewshot`. `update_field` takes an optional `reason_lang`. `recent_corrections` rows include the record's `transcript_original` and `lang`.
 > - Timezone for resolving "ahir" / "ayer" / "вчера": `Europe/Madrid` (`TZ_NAME` in `.env`).
+> - **Storage moved to PostgreSQL** (`app/db.py`, same functions and rules). It runs in Person 2's Docker
+>   (`postgres` service, port 5432). Set `DATABASE_URL=postgresql://fieldvoice:<password>@<Person 2's Wi-Fi IP>:5432/fieldvoice`
+>   in `.env` (password from Person 2, privately). Tests get a throwaway schema each (`tests/conftest.py`). Mentions of
+>   SQLite / `DB_PATH` below are outdated.
 
 ### 4.1 `app/schemas.py`
 ```python

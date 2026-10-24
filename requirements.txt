@@ -8,3 +8,5 @@ fastapi
 uvicorn[standard]
 elevenlabs
 python-multipart
+psycopg[binary]>=3.2
+psycopg-pool>=3.2
