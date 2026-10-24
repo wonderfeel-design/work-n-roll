@@ -104,6 +104,60 @@
   .corr .chg { margin: 4px 0; font: 13px ui-monospace, monospace; }
   .corr .chg s { color: var(--muted); }
   .corr p { margin: 0; }
+  /* --- voice assistant (Task 6) --- */
+  main { padding-bottom: 230px; }
+  body::after { content: ""; position: fixed; inset: auto 0 0 0; height: 170px; z-index: 4; pointer-events: none;
+                background: linear-gradient(to bottom, transparent, var(--bg) 62%); }  /* table fades out under the assistant */
+  .assistant { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5;
+               display: grid; justify-items: center; gap: 10px; width: min(680px, calc(100vw - 32px)); pointer-events: none; }
+  .assistant > * { pointer-events: auto; }
+  .orb { --lvl: 0; position: relative; width: 84px; height: 84px; border: 0; padding: 0; cursor: pointer;
+         background: transparent; color: #fff; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
+  .orb .blob { position: absolute; inset: 0; border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%;
+               background: radial-gradient(circle at 30% 28%, #9be3a8 0%, #3f9a55 38%, #1f6b4a 72%, #134d3f 100%);
+               box-shadow: 0 8px 26px rgba(31, 107, 74, .35), inset 0 -6px 14px rgba(0, 0, 0, .18);
+               transform: scale(calc(1 + var(--lvl) * .32)); transition: transform 90ms linear;
+               animation: morph 7s ease-in-out infinite; }
+  .orb::before, .orb::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
+               border: 2px solid #3f9a55; opacity: 0; pointer-events: none; }
+  .orb svg { position: relative; width: 30px; height: 30px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+  .orb .i-think, .orb .i-speak { display: none; }
+  .orb:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; border-radius: 50%; }
+  .orb.listening .blob { animation-duration: 2.2s; background: radial-gradient(circle at 30% 28%, #b5f0c0 0%, #4cb86a 40%, #1f7a52 75%, #134d3f 100%); }
+  .orb.listening::before { animation: ripple 1.8s ease-out infinite; }
+  .orb.listening::after { animation: ripple 1.8s ease-out .9s infinite; }
+  .orb.thinking .blob { animation: morph 1.6s ease-in-out infinite, swirl 1.4s linear infinite;
+               background: conic-gradient(from 0deg, #1f6b4a, #6fd08a, #2a8fbf, #1f6b4a); }
+  .orb.thinking .i-mic, .orb.speaking .i-mic { display: none; }
+  .orb.thinking .i-think { display: block; }
+  .orb.speaking .i-speak { display: block; }
+  .orb.speaking .blob { animation-duration: 3s; background: radial-gradient(circle at 30% 28%, #a8d8f5 0%, #3f8fc4 40%, #1f5a8a 75%, #143c5e 100%);
+               box-shadow: 0 8px 30px rgba(42, 95, 184, .4); }
+  .orb.speaking::before { border-color: #3f8fc4; animation: ripple 2.4s ease-out infinite; }
+  @keyframes morph {
+    0%, 100% { border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%; }
+    25% { border-radius: 58% 42% 46% 54% / 44% 58% 42% 56%; }
+    50% { border-radius: 42% 58% 60% 40% / 56% 42% 58% 44%; }
+    75% { border-radius: 54% 46% 40% 60% / 48% 60% 40% 52%; } }
+  @keyframes ripple { from { transform: scale(1); opacity: .55; } to { transform: scale(1.9); opacity: 0; } }
+  @keyframes swirl { to { rotate: 360deg; } }
+  @media (prefers-reduced-motion: reduce) {
+    .orb .blob, .orb::before, .orb::after { animation: none !important; } }
+  .subs { min-height: 0; max-width: 100%; text-align: center; padding: 8px 16px; border-radius: 10px;
+          background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px);
+          border: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.08); }
+  .subs:empty { display: none; }
+  .subs .q { font-size: 13px; color: var(--muted); }
+  .subs .a { font-size: 17px; line-height: 1.4; margin-top: 2px; }
+  .subs .a .w { opacity: .18; transition: opacity .15s; }
+  .subs .a .w.on { opacity: 1; }
+  .subs .hint { font-size: 13px; color: var(--muted); }
+  .subs .err { color: var(--danger); font-size: 14px; }
+  .voices { position: fixed; left: 16px; bottom: 16px; z-index: 5; display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .voices select { max-width: 230px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                   background: var(--card); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  @media (max-width: 760px) { .voices { position: static; padding: 0 20px 12px; } main { padding-bottom: 260px; } }
+
   #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 8px 14px; border-radius: 6px;
            background: var(--ink); color: var(--bg); opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.on { opacity: 1; }
@@ -137,6 +191,16 @@
     <div class="scroll" id="corrections"></div>
   </aside>
 </main>
+<div class="assistant">
+  <button class="orb" id="orb" type="button" aria-label="">
+    <span class="blob"></span>
+    <svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    <svg class="i-think" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>
+    <svg class="i-speak" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
+  </button>
+  <div class="subs" id="subs" aria-live="polite"></div>
+</div>
+<label class="voices"><span id="voice-label"></span><select id="voice"></select></label>
 <div id="toast" role="status"></div>
 
 <script>
@@ -151,6 +215,9 @@ const T = {
     approve: "Aprova", correct: "Corregeix", field: "Camp", value: "Valor nou", reason: "Motiu (obligatori)",
     save: "Desa", cancel: "Cancel·la", was: "Valor actual", reasonNeeded: "Cal un motiu: és el que aprèn el model.",
     approved: "aprovat", corrected: "corregit", by: "per",
+    voice: "Veu", ownVoices: "Les teves veus", talk: "Parla amb l'assistent", hint: "Prem i pregunta: «Quant coure he fet servir als ametllers?»",
+    listening: "T'escolto…", thinking: "Consultant el registre…", noSpeech: "No t'he sentit. Torna a prémer per parlar.",
+    micDenied: "Cal permís per al micròfon.",
     status: { draft: "esborrany", farmer_confirmed: "confirmat pel pagès", auto_approved: "aprovat automàticament",
               needs_review: "pendent de revisió", validated: "validat", corrected: "corregit", discarded: "descartat" },
     fields: { date: "Data", parcel_alias: "Parcel·la", activity_key: "Activitat", product: "Producte",
@@ -166,6 +233,9 @@ const T = {
     approve: "Approve", correct: "Correct", field: "Field", value: "New value", reason: "Reason (required)",
     save: "Save", cancel: "Cancel", was: "Current value", reasonNeeded: "A reason is required: it is what the model learns from.",
     approved: "approved", corrected: "corrected", by: "by",
+    voice: "Voice", ownVoices: "Your voices", talk: "Talk to the assistant", hint: "Tap and ask: “How much copper did I use on the almonds?”",
+    listening: "Listening…", thinking: "Checking the log…", noSpeech: "I didn't hear anything. Tap again to talk.",
+    micDenied: "Microphone permission is needed.",
     status: { draft: "draft", farmer_confirmed: "farmer confirmed", auto_approved: "auto-approved",
               needs_review: "needs review", validated: "validated", corrected: "corrected", discarded: "discarded" },
     fields: { date: "Date", parcel_alias: "Parcel", activity_key: "Activity", product: "Product",
@@ -211,6 +281,10 @@ function renderChrome() {
   $("subtitle").textContent = t().subtitle;
   $("corr-title").textContent = t().corrTitle;
   $("report").textContent = `⬇ ${t().report}`;
+  $("voice-label").textContent = t().voice;
+  $("orb").setAttribute("aria-label", t().talk);
+  renderVoices();
+  if (asst.mode === "idle" && !asst.answer) setSubs(`<div class="hint">${esc(t().hint)}</div>`);
   $("head").innerHTML = t().cols.map(c => `<th>${esc(c)}</th>`).join("");
   for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", b.dataset.lang === state.lang);
   $("review").setAttribute("aria-pressed", state.reviewOnly);
@@ -364,6 +438,166 @@ $("rows").addEventListener("click", async e => {
   }
 });
 
+// --- voice assistant (Task 6) -------------------------------------------------------
+// One tap starts a conversation: listen -> (pause ends the question) -> server: Scribe -> LLM -> TTS -> play,
+// then listen again for a follow-up. Tap again or stay silent to end it.
+
+const asst = { mode: "idle", stream: null, ctx: null, rec: null, raf: 0, audio: null, history: [],
+               answer: "", voices: [], defaultVoice: "", voice: "" };
+const SILENCE_MS = 1300, NO_SPEECH_MS = 7000, MAX_MS = 20000, HISTORY = 6;
+try { asst.voice = localStorage.getItem("fv-voice") || ""; } catch {}
+
+function setSubs(html) { $("subs").innerHTML = html; }
+function setMode(mode) {
+  asst.mode = mode;
+  $("orb").className = `orb ${mode}`;
+  if (mode !== "listening" && mode !== "speaking") $("orb").style.setProperty("--lvl", 0);
+}
+
+function renderVoices() {
+  const sel = $("voice");
+  if (!asst.voices.length) { sel.innerHTML = ""; sel.disabled = true; return; }
+  const opt = v => `<option value="${esc(v.voice_id)}" ${v.voice_id === (asst.voice || asst.defaultVoice) ? "selected" : ""}>${
+    esc(v.name)}${v.description ? ` · ${esc(v.description)}` : ""}</option>`;
+  const own = asst.voices.filter(v => v.category !== "premade"), lib = asst.voices.filter(v => v.category === "premade");
+  sel.innerHTML = (own.length ? `<optgroup label="${esc(t().ownVoices)}">${own.map(opt).join("")}</optgroup>` : "")
+    + `<optgroup label="ElevenLabs">${lib.map(opt).join("")}</optgroup>`;
+  sel.disabled = false;
+}
+
+$("voice").addEventListener("change", e => {
+  asst.voice = e.target.value;
+  try { localStorage.setItem("fv-voice", asst.voice); } catch {}
+});
+
+function level(analyser, buf) {           // RMS of the current audio frame, 0..~0.5
+  analyser.getFloatTimeDomainData(buf);
+  let s = 0; for (const x of buf) s += x * x;
+  return Math.sqrt(s / buf.length);
+}
+
+async function ensureMic() {
+  asst.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+  await asst.ctx.resume();
+  if (!asst.stream || asst.stream.getTracks().some(tr => tr.readyState === "ended")) {
+    asst.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  }
+}
+
+function endConversation(message = "") {
+  cancelAnimationFrame(asst.raf);
+  if (asst.rec?.state === "recording") { asst.rec.onstop = null; asst.rec.stop(); }
+  if (asst.audio) { asst.audio.pause(); asst.audio = null; }
+  asst.stream?.getTracks().forEach(tr => tr.stop());   // releases the browser's mic indicator
+  asst.stream = null;
+  setMode("idle");
+  if (message) setSubs(message);
+}
+
+function listen() {
+  const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(m => window.MediaRecorder?.isTypeSupported(m)) || "";
+  const rec = new MediaRecorder(asst.stream, mime ? { mimeType: mime } : {});
+  const chunks = [];
+  asst.rec = rec;
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => ask(new Blob(chunks, { type: rec.mimeType }), rec.mimeType.includes("mp4") ? "mp4" : "webm");
+
+  const src = asst.ctx.createMediaStreamSource(asst.stream), an = asst.ctx.createAnalyser();
+  an.fftSize = 1024; src.connect(an);
+  const buf = new Float32Array(an.fftSize), started = performance.now();
+  let floor = 0, frames = 0, heard = false, lastVoice = started;
+  setMode("listening");
+  if (!asst.history.length) setSubs(`<div class="hint">${esc(t().listening)}</div>`);  // follow-ups keep the last answer
+  rec.start(250);
+
+  const tick = now => {
+    const lvl = level(an, buf);
+    if (frames < 15) { floor = Math.max(floor, lvl); frames++; }        // ~250 ms of room noise
+    const threshold = Math.max(0.015, floor * 2.5);
+    $("orb").style.setProperty("--lvl", Math.min(1, lvl * 6).toFixed(3));
+    if (lvl > threshold) { heard = true; lastVoice = now; }
+    const elapsed = now - started;
+    if (heard && (now - lastVoice > SILENCE_MS || elapsed > MAX_MS)) { src.disconnect(); return rec.stop(); }
+    if (!heard && elapsed > NO_SPEECH_MS) {             // silence: end; after an answer, end quietly
+      src.disconnect();
+      return endConversation(asst.history.length ? "" : `<div class="hint">${esc(t().noSpeech)}</div>`);
+    }
+    asst.raf = requestAnimationFrame(tick);
+  };
+  asst.raf = requestAnimationFrame(tick);
+}
+
+async function ask(blob, ext) {
+  cancelAnimationFrame(asst.raf);
+  setMode("thinking");
+  setSubs(`<div class="hint">${esc(t().thinking)}</div>`);
+  const form = new FormData();
+  form.append("audio", blob, `question.${ext}`);
+  form.append("lang", state.lang);
+  form.append("voice_id", asst.voice || asst.defaultVoice);
+  form.append("history", JSON.stringify(asst.history.slice(-HISTORY)));
+  let res;
+  try {
+    const r = await fetch("api/ask", { method: "POST", body: form });
+    res = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(res.detail || r.statusText);
+  } catch (err) {
+    return endConversation(`<div class="err">${esc(err.message)}</div>`);
+  }
+  if (asst.mode !== "thinking") return;                 // ended while waiting
+  asst.history.push({ role: "user", text: res.question }, { role: "assistant", text: res.answer });
+  speak(res);
+}
+
+function speak(res) {
+  asst.answer = res.answer;
+  const words = res.answer.split(/\s+/);
+  setSubs(`<div class="q">${esc(res.question)}</div><div class="a" lang="${esc(res.lang)}">${
+    words.map(w => `<span class="w">${esc(w)}</span>`).join(" ")}</div>`);
+  const spans = [...$("subs").querySelectorAll(".a .w")];
+  const showAll = () => spans.forEach(s => s.classList.add("on"));
+  if (!res.audio) { showAll(); setMode("idle"); return setTimeout(() => asst.mode === "idle" && asst.stream && listen(), 1500); }
+
+  const audio = new Audio(`data:audio/mpeg;base64,${res.audio}`);
+  asst.audio = audio;
+  const src = asst.ctx.createMediaElementSource(audio), an = asst.ctx.createAnalyser();
+  an.fftSize = 1024; src.connect(an); an.connect(asst.ctx.destination);
+  const buf = new Float32Array(an.fftSize);
+  setMode("speaking");
+  const tick = () => {
+    $("orb").style.setProperty("--lvl", Math.min(1, level(an, buf) * 5).toFixed(3));
+    if (audio.duration) {                                 // reveal words in step with the voice
+      const n = Math.ceil(words.length * Math.min(1, audio.currentTime / (audio.duration * 0.92)));
+      spans.forEach((s, i) => s.classList.toggle("on", i < n));
+    }
+    asst.raf = requestAnimationFrame(tick);
+  };
+  audio.onended = () => {
+    cancelAnimationFrame(asst.raf); showAll(); asst.audio = null;
+    if (asst.mode === "speaking") listen();                // keep the conversation going
+  };
+  audio.play().then(() => { asst.raf = requestAnimationFrame(tick); })
+    .catch(() => { showAll(); setMode("idle"); });
+}
+
+$("orb").addEventListener("click", async () => {
+  if (asst.mode === "listening") { cancelAnimationFrame(asst.raf); return asst.rec.stop(); }   // done talking
+  if (asst.mode === "speaking" || asst.mode === "thinking") return endConversation(asst.answer ? $("subs").innerHTML : "");
+  try { await ensureMic(); }
+  catch { return setSubs(`<div class="err">${esc(t().micDenied)}</div>`); }
+  asst.history = [];
+  listen();
+});
+
+async function loadVoices() {
+  try {
+    const r = await api("voices");
+    asst.voices = r.voices; asst.defaultVoice = r.default;
+    if (asst.voice && !asst.voices.some(v => v.voice_id === asst.voice)) asst.voice = "";
+  } catch { asst.voices = []; }
+  renderVoices();
+}
+
 // --- controls + polling -----------------------------------------------------------
 
 $("review").addEventListener("click", () => { state.reviewOnly = !state.reviewOnly; render(); });
@@ -384,6 +618,7 @@ async function refresh() {
 
 (async () => {
   renderChrome();
+  loadVoices();
   try { [state.parcels, state.vocab] = await Promise.all([api("parcels"), api("vocabulary")]); } catch {}
   await refresh();
   setInterval(refresh, POLL_MS);

@@ -5,20 +5,24 @@
 The bot writes to the same SQLite file from its own process; the page polls /api/records every 2 s.
 Everything except /api/health needs the login. The console always acts as the agronomist.
 """
+import base64
+import json
 import os
 import secrets
 import sqlite3
+import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, ValidationError
 
-from app import ROOT, db, export
-from app.schemas import STATUS_TRANSITIONS, Record
+from app import ROOT, assistant, db, export, voice
+from app.schemas import LANGS, STATUS_TRANSITIONS, Record
 
 INDEX_HTML = ROOT / "web" / "index.html"
 EXPERT = "agronomist"
@@ -125,6 +129,69 @@ def parcels() -> list[dict]:
 @api.get("/vocabulary")
 def vocabulary() -> list[dict]:
     return db.get_vocabulary()
+
+
+@api.get("/voices")
+def voices() -> dict:
+    """ElevenLabs voices for the assistant's picker; the configured default comes first in the UI."""
+    try:
+        return {"default": voice.default_voice_id(), "voices": list(voice.list_voices())}
+    except Exception as e:
+        raise HTTPException(503, f"ElevenLabs voices unavailable: {e}")
+
+
+ASK_MAX_BYTES = 5 * 1024 * 1024  # ~ several minutes of Opus; a question is a few seconds
+
+
+@api.post("/ask")
+def ask(audio: Optional[UploadFile] = File(None), text: str = Form(""), lang: str = Form("en"),
+        voice_id: str = Form(""), history: str = Form("[]")) -> dict:
+    """Voice Q&A (Task 6): recorded question -> Scribe -> Gemma over the field log -> TTS in the chosen voice.
+
+    `text` replaces the recording (tests, typed questions); `lang` is then the answer language.
+    """
+    timings, started = {}, time.monotonic()
+    question = text.strip()
+    if audio is not None:
+        data = audio.file.read(ASK_MAX_BYTES + 1)
+        if len(data) > ASK_MAX_BYTES:
+            raise HTTPException(413, "Recording too long")
+        suffix = Path(audio.filename or "").suffix.lower() or ".webm"
+        tmp = voice.DATA_DIR / "audio" / f"web-{uuid.uuid4().hex[:12]}{suffix}"
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(data)
+        try:
+            heard = voice.transcribe(str(tmp))
+        except voice.VoiceError as e:
+            raise HTTPException(502, f"Speech recognition failed: {e}")
+        finally:
+            tmp.unlink(missing_ok=True)
+        question, lang = heard["text"], heard["lang"]
+        timings["stt_ms"] = round((time.monotonic() - started) * 1000)
+    if not question:
+        raise HTTPException(422, "No question heard")
+    if lang not in LANGS:
+        lang = "en"
+    try:
+        turns = json.loads(history or "[]")
+        turns = [t for t in turns if isinstance(t, dict)] if isinstance(turns, list) else []
+    except json.JSONDecodeError:
+        turns = []
+
+    t = time.monotonic()
+    try:
+        reply = assistant.answer(question, lang, turns)
+    except assistant.AssistantError as e:
+        raise HTTPException(502, f"Gemma failed: {e}")
+    timings["llm_ms"] = round((time.monotonic() - t) * 1000)
+
+    t = time.monotonic()
+    known = {v["voice_id"] for v in voice.list_voices()} if voice_id else set()
+    mp3 = voice.tts_mp3(reply, lang, voice_id if voice_id in known else None)
+    timings["tts_ms"] = round((time.monotonic() - t) * 1000)
+    timings["total_ms"] = round((time.monotonic() - started) * 1000)
+    return {"question": question, "lang": lang, "answer": reply, "timings": timings,
+            "audio": base64.b64encode(mp3.read_bytes()).decode() if mp3 else None}
 
 
 @api.get("/report.xlsx")

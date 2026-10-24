@@ -125,6 +125,9 @@ Decided during design on 2026-10-24. The full v1 architecture was cut to fit 3 h
 | 15 | Excel | Export only, never imported back; same tabs and column order as the sample | The database is the system of record |
 | 16 | Work split | Person 1: Telegram + Gemma. Person 2: voice + web + export (all ElevenLabs calls) | Equal load; one person owns all ElevenLabs keys and quirks |
 | 17 | Python | 3.12 | Fixed stack in the CLAUDE files |
+| 18 | Web voice assistant | Turn-based: tap the orb, speak, a pause ends the question; Scribe → LLM → ElevenLabs TTS in a voice picked from the account; subtitles under the orb; it listens again for follow-ups | Runs locally with no public URL (no ElevenLabs Agents tunnel). About 3 s from the end of the question to the start of the answer |
+| 19 | Assistant data | The server computes totals, counts and average dose per hectare in Python (by product, parcel, month) and gives them to the LLM with the records; the LLM only phrases the answer | Exact arithmetic, and nothing the LLM writes can reach the database. "Bought" is answered as "used": the log records applications, not purchases |
+| 20 | Assistant model | `gemini-3.5-flash` (`ASSISTANT_MODEL`), Gemma 4 as fallback; the bot's extraction stays on Gemma | Gemma 4 on the Gemini API always thinks for 12–18 s before answering and that can't be switched off; Flash answers the same questions correctly in ~1.5 s |
 
 ## Roadmap (full v1 architecture)
 
