@@ -1,0 +1,43 @@
+# docker compose up --build              -> seed, then web on http://localhost:8000
+# docker compose --profile bot up --build -> also the Telegram bot (once app/bot.py exists)
+name: fieldvoice
+
+x-app: &app
+  build: .
+  image: fieldvoice:dev
+  env_file: .env
+  environment:
+    DB_PATH: data/fieldvoice.db
+  volumes:
+    # Database, audio, TTS cache, logs and exports, shared by all services
+    - fieldvoice-data:/app/data
+    # Reference workbook from the repo, so edits reach the next seed without a rebuild
+    - ./data/satech_dun_field_log_sample.xlsx:/app/data/satech_dun_field_log_sample.xlsx:ro
+
+services:
+  seed:
+    <<: *app
+    command: ["python", "-m", "app.seed"]
+    restart: "no"
+
+  web:
+    <<: *app
+    command: ["uvicorn", "app.web:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  bot:
+    <<: *app
+    command: ["python", "-m", "app.bot"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    profiles: ["bot"]  # TODO(P1): remove once app/bot.py lands on main
+
+volumes:
+  fieldvoice-data:

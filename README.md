@@ -108,7 +108,8 @@ Decided during design on 2026-10-24. The full v1 architecture was cut to fit 3 h
 |---|---|---|---|
 | 1 | LLM | `gemma-4-26b-a4b-it` on the Gemini API; `gemma-4-31b-it` as a per-call fallback | The mixture-of-experts model is fast and cheap (about 4B active parameters) and reads images. One model keeps prompts simple |
 | 2 | Speech-to-text | ElevenLabs Scribe, one transcript | The Gemini API serves Gemma 4 without audio input, so Gemma can't listen to compare transcripts. Mistakes are caught by the validator's range checks and the farmer's read-back instead |
-| 3 | Voice replies | ElevenLabs multilingual TTS, converted with ffmpeg to OGG/Opus | Telegram only shows a voice bubble for OGG/Opus; MP3 would appear as a music file. Catalan is tested first and falls back to Spanish if it sounds wrong |
+| 3 | Voice replies | ElevenLabs TTS `eleven_v4_turbo` with `language_code`, converted with ffmpeg to OGG/Opus, cached by text in `data/tts` | Telegram only shows a voice bubble for OGG/Opus; MP3 would appear as a music file. `eleven_multilingual_v2` has no Catalan; v4 has all four languages and turbo answers in ~0.4 s. Catalan TTS passes a round trip (Scribe hears it as Catalan), so no Spanish fallback is needed |
+| 3a | Speech-to-text model | Scribe `scribe_v2` with ~57 keyterms (parcel names, crops, pests) | Keyterms bias recognition toward farm words; kept under 100 to avoid a 20 s minimum charge per note |
 | 4 | Confirmation | The farmer confirms **every** row, then the validator scores it. ≥ 0.80 auto-approves, below goes to the agronomist | Follows the sample sheet's status flow. The read-back is the safety net for transcription errors. 0.80 is a guess to tune |
 | 5 | Timezone | Europe/Madrid | Resolving "ahir" / "ayer" / "вчера" / "yesterday" to a date |
 | 6 | Parcels | Seed the 5 sample parcels from `Parcels_DUN`; no adding parcels by voice | The DUN parcel list is filled once per farm. The bot needs it to map spoken names to P1–P5 |
@@ -139,6 +140,19 @@ Designed, not in the 3-hour MVP:
 - `docker compose up` for postgres, api, web and tunnel.
 
 ## Running locally
+
+With Docker (needs only Docker Desktop):
+
+```bash
+cp .env.example .env                       # fill in keys
+docker compose up --build                  # seed, then the console on http://localhost:8000
+docker compose --profile bot up --build    # also the Telegram bot
+docker compose down                        # stop; add -v to also delete the database volume
+```
+
+One image runs every process. Keys are read from `.env` at start and never copied into the image. The database, audio and exports live in the `fieldvoice-data` volume. The console listens on `127.0.0.1` only.
+
+Without Docker:
 
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
