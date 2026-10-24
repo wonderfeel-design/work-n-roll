@@ -156,11 +156,31 @@ def _since(started: float) -> float:
 
 # --- public API ----------------------------------------------------------------
 
+# Relative dates, longest phrase first ("abans d'ahir" contains "ahir", "позавчера" contains "вчера").
+RELATIVE_DAYS: tuple[tuple[str, int], ...] = (
+    ("day before yesterday", -2), ("abans d'ahir", -2), ("abans-d'ahir", -2), ("antes de ayer", -2),
+    ("anteayer", -2), ("позавчера", -2),
+    ("yesterday", -1), ("ahir", -1), ("ayer", -1), ("вчера", -1),
+    ("today", 0), ("avui", 0), ("hoy", 0), ("сегодня", 0),
+)
+
+
+def resolve_relative_date(spoken: str | None) -> str | None:
+    """Safety net when the model leaves date empty but said "today" / "ahir" / "вчера"."""
+    said = (spoken or "").lower().replace("’", "'")
+    for phrase, days in RELATIVE_DAYS:
+        if phrase in said:
+            return (_today() + dt.timedelta(days=days)).isoformat()
+    return None
+
+
 def _clean(rec: Extracted) -> Extracted:
     aliases = {p["alias"] for p in db.get_parcels()}
     data = rec.model_dump()
     if data["parcel_alias"] not in aliases:
         data["parcel_alias"] = None
+    if data["date"] is None:
+        data["date"] = resolve_relative_date(data["date_spoken"])
     cleaned = Extracted.model_validate(data)
     cleaned.missing_fields = missing_fields(cleaned)
     return cleaned

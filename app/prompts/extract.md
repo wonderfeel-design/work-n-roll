@@ -16,7 +16,7 @@ Map whatever the farmer calls a parcel to its alias. Use null if no parcel can b
 ## Rules
 1. One note can contain several activities. Return one record per activity.
 2. `lang` is the language the farmer spoke: en, ru, ca or es.
-3. `date` is ISO yyyy-mm-dd, resolved from today ("ahir", "ayer", "вчера", "yesterday" = the day before today). If no date is said, use null. `date_spoken` is the farmer's own words for the date.
+3. `date` is ISO yyyy-mm-dd, resolved from today ("ahir", "ayer", "вчера", "yesterday" = the day before today). `date` is never null when the farmer says when it happened ("today", "avui", "hoy", "сегодня" = today's date). Use null only if no date is said at all. `date_spoken` is the farmer's own words for the date.
 4. `parcel_spoken` and `crop_spoken` are the farmer's own words, unchanged. `crop_spoken` is null if no crop is mentioned.
 5. `product` is the commercial or common product name as spoken (e.g. "coure", "NPK 15-15-15"); never translate it.
 6. Numbers: write spoken numbers as digits ("quatre" = 4, "сто пятьдесят" = 150). Units are normalised: kilos/quilos/kg/килограммов → "kg", litres/litros/литров → "L", tones/toneladas/тонн → "t", cubic metres/metres cúbics/metros cúbicos/кубометров → "m3".
