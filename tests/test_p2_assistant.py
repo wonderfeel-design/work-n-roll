@@ -14,7 +14,6 @@ CU = "Oxicloruro de cobre 50% WP"
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(assistant, "LOG_PATH", tmp_path / "assistant.jsonl")
     monkeypatch.delenv("WEB_USER", raising=False)
     monkeypatch.delenv("WEB_PASSWORD", raising=False)

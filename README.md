@@ -16,7 +16,7 @@ License: Apache 2.0.
 
 ## Architecture
 
-The MVP is built in 3 hours by two people. Two Python processes share one SQLite file.
+The MVP is built in 3 hours by two people. Two Python processes, on one machine or on two laptops, share one PostgreSQL database.
 
 ```
                         ┌──────────────────────── Person 1 ────────────────────────┐
@@ -28,7 +28,7 @@ The MVP is built in 3 hours by two people. Two Python processes share one SQLite
    └── card + voice ─────┤               │  5. voice.speak()       ───────────────────┼──▶ ElevenLabs TTS → ffmpeg → OGG/Opus
                          └───────────────┼───────────────────────────────────────────┘
                                          ▼
-                              data/fieldvoice.db  (SQLite, WAL)
+                              PostgreSQL 16  (Docker service, port 5432)
                               parcels · field_log · corrections
                               vocabulary · ui_strings · farmers
                                          ▲
@@ -47,7 +47,7 @@ The MVP is built in 3 hours by two people. Two Python processes share one SQLite
 | Voice I/O | Person 2 | `app/voice.py` | `transcribe()` with Scribe (text + detected language), `speak()` with multilingual TTS → OGG/Opus |
 | Agronomist console | Person 2 | `app/web.py`, `web/index.html` | Live table, approve, correct with a required reason, corrections panel |
 | Excel export | Person 2 | `app/export.py` | `.xlsx` with the sample sheet's tabs and columns |
-| Shared contract | both | `app/schemas.py`, `app/db.py`, `app/seed.py` | Pydantic models, SQLite access, seeding from the sample workbook. Changed only by agreement |
+| Shared contract | both | `app/schemas.py`, `app/db.py`, `app/seed.py` | Pydantic models, PostgreSQL access, seeding from the sample workbook. Changed only by agreement |
 
 Per-person build instructions: [CLAUDE_person1.md](CLAUDE_person1.md), [CLAUDE_person2.md](CLAUDE_person2.md).
 
@@ -94,7 +94,7 @@ Rules:
 - Product names, registration numbers and SIGPAC references are never translated.
 - The workbook shows the **format**. Its Field_Log and Corrections rows are examples and are never imported.
 
-Correction rules (enforced by `app/db.py` and the SQLite schema):
+Correction rules (enforced by `app/db.py` and the PostgreSQL schema: constraints and triggers):
 - Every change to a stored record goes through `update_field`, which writes the new value and a `corrections` row in one transaction.
 - A correction needs an existing record, an editable field, `farmer` or `agronomist` as author, a non-empty reason and a real change.
 - Corrections are append-only (only `used_as_fewshot` can be switched off). Records are never deleted; they are discarded.
@@ -116,7 +116,7 @@ Decided during design on 2026-10-24. The full v1 architecture was cut to fit 3 h
 | 7 | Users | One farmer for now | MVP scope. The `farmers` table already allows more later |
 | 8 | Sample workbook | Format reference only. Seeding loads Parcels_DUN, Vocabulary and UI_Strings; Field_Log and Corrections start empty | The rows are fictional examples |
 | 8a | Corrections | Strict: foreign key to the record, required reason, append-only, records never deleted | Corrections are the training signal for the judge; they must be trustworthy |
-| 9 | Database | SQLite (WAL) instead of PostgreSQL + pgvector | No server to run; the bot and web processes share one file. Full-text search over notes is a later job |
+| 9 | Database | PostgreSQL 16 in Docker (`postgres` service), port 5432 open on the local network; `DATABASE_URL` in `.env` | Started as SQLite, which only works while bot and web run on one machine: Person 1's bot wrote to their laptop's file and the console never saw it. Postgres lets the bot on one laptop and the console on another share the same data. Password: long random value in `.env`, never committed |
 | 10 | Live updates | Web polls every 2 s instead of SSE + LISTEN/NOTIFY | Looks the same in a demo, saves about an hour |
 | 11 | Web frontend | One plain HTML file + `fetch` instead of React + Vite + TanStack Table | No build step |
 | 12 | Web role | The web page is the agronomist console | Gives the "Judge That Learns from an Expert" track a home without extra work |
@@ -136,7 +136,7 @@ Designed, not in the 3-hour MVP:
 - **Live voice on the web:** ElevenLabs Agents for mic streaming and turn-taking, with a *custom LLM* pointing at our OpenAI-compatible shim (`/v1/chat/completions`), so Gemma 4 still does the reasoning. Needs a public HTTPS URL (cloudflared tunnel; accepted) and a shared secret on the shim.
 - **Q&A / edit agent** in chat with tools: `query_log` (read-only SQL views under a read-only DB role with a statement timeout), `search_notes`, `update_record`, `add_record`, `export_report`.
 - **Photo input:** bills and product labels read by Gemma vision; `gemma-4-31b-it` for hard photos.
-- **PostgreSQL 16** with SSE live updates via LISTEN/NOTIFY, `record_history` for every edit, raw `messages` with audio and photo paths, then full-text or pgvector search.
+- **SSE live updates** via Postgres LISTEN/NOTIFY instead of polling, `record_history` for every edit, raw `messages` with audio and photo paths, then full-text or pgvector search.
 - **React + Vite + TanStack Table** web app with editable cells.
 - **Signed `/web` links** from the bot, exchanged for a cookie.
 - **Several farmers**, each with their own ROPO licence and default equipment.
@@ -152,13 +152,14 @@ docker compose up --build                  # seed, the console on http://localho
 docker compose down                        # stop; add -v to also delete the database volume
 ```
 
-One image runs every process. Keys are read from `.env` at start and never copied into the image. The database, audio and exports live in the `fieldvoice-data` volume. The console listens on `127.0.0.1` only.
+One image runs every process. Keys are read from `.env` at start and never copied into the image. Records live in PostgreSQL (`fieldvoice-pg` volume); audio, TTS cache and exports in `fieldvoice-data`. The console listens on `127.0.0.1` only; PostgreSQL listens on port 5432 on the local network so a second laptop can run the bot against it (set `DATABASE_URL` to this machine's IP). Tests need PostgreSQL running (`docker compose up -d postgres`) and use a throwaway schema each.
 
 Without Docker:
 
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env                       # fill in keys
+cp .env.example .env                       # fill in keys, POSTGRES_PASSWORD and DATABASE_URL
+docker compose up -d postgres              # the database (or point DATABASE_URL at another machine's)
 .venv/bin/python -m app.seed               # parcels, vocabulary, UI strings
 .venv/bin/python -m pytest -q              # contract tests
 .venv/bin/python -m app.bot                # Person 1: Telegram bot

@@ -1,4 +1,6 @@
-# docker compose up --build   -> seed, then web on http://localhost:8000 and the Telegram bot
+# docker compose up --build   -> postgres, seed, then web on http://localhost:8000 and the Telegram bot
+# PostgreSQL listens on this machine's port 5432 on every interface, so other laptops on the same
+# network can use it (DATABASE_URL with this machine's Wi-Fi IP). POSTGRES_PASSWORD comes from .env.
 name: fieldvoice
 
 x-app: &app
@@ -6,27 +8,49 @@ x-app: &app
   image: fieldvoice:dev
   env_file: .env
   environment:
-    DB_PATH: data/fieldvoice.db
+    # Containers reach the database by service name, not localhost
+    DATABASE_URL: postgresql://fieldvoice:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/fieldvoice
   volumes:
-    # Database, audio, TTS cache, logs and exports, shared by all services
+    # Audio, TTS cache, logs and exports, shared by all services (records live in PostgreSQL)
     - fieldvoice-data:/app/data
     # Reference workbook from the repo, so edits reach the next seed without a rebuild
     - ./data/satech_dun_field_log_sample.xlsx:/app/data/satech_dun_field_log_sample.xlsx:ro
+  depends_on: &after-seed
+    seed:
+      condition: service_completed_successfully
 
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fieldvoice
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: fieldvoice
+      TZ: Europe/Madrid
+    ports:
+      - "5432:5432"
+    volumes:
+      - fieldvoice-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldvoice -d fieldvoice"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   seed:
     <<: *app
     command: ["python", "-m", "app.seed"]
     restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     <<: *app
     command: ["uvicorn", "app.web:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
-    depends_on:
-      seed:
-        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -37,10 +61,8 @@ services:
   bot:
     <<: *app
     command: ["python", "-m", "app.bot"]
-    depends_on:
-      seed:
-        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   fieldvoice-data:
+  fieldvoice-pg:

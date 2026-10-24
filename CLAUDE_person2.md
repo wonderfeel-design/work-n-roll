@@ -76,6 +76,10 @@ GEMINI_API_KEY=             # Person 1 only
 > - **No sample data is imported.** `seed.py` loads only `Parcels_DUN`, `Vocabulary` and `UI_Strings`. There is no `--with-sample-log`: web tests create their own records through `db.insert_record`.
 > - Extra helpers: `get_farmer`, `set_farmer_name`, `label(type, key, lang)` (vocabulary label), `corrections_for(record_id)`, `set_fewshot`.
 > - The web console keeps a login (`WEB_USER` / `WEB_PASSWORD`, default `admin` / `admin`), by the human's decision.
+> - **Storage moved to PostgreSQL** (`app/db.py`, same functions and rules). It runs in Person 2's Docker
+>   (`postgres` service, port 5432). Set `DATABASE_URL=postgresql://fieldvoice:<password>@<Person 2's Wi-Fi IP>:5432/fieldvoice`
+>   in `.env` (password from Person 2, privately). Tests get a throwaway schema each (`tests/conftest.py`). Mentions of
+>   SQLite / `DB_PATH` below are outdated.
 
 ### 4.1 `app/schemas.py`
 ```python

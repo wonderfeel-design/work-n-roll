@@ -10,7 +10,6 @@ AUTH = ("admin", "admin")
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     monkeypatch.delenv("WEB_USER", raising=False)
     monkeypatch.delenv("WEB_PASSWORD", raising=False)
     db.init_db()

@@ -1,6 +1,4 @@
 """Shared contract: seeding and the strict correction rules in app/db.py."""
-import sqlite3
-
 import pytest
 from pydantic import ValidationError
 
@@ -10,7 +8,6 @@ from app.schemas import Record
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
     seed.seed()
 
@@ -55,7 +52,7 @@ def test_insert_rejects_non_draft_and_unknown_parcel():
     with pytest.raises(ValueError):
         db.insert_record(Record(lang="en", activity_key="other", farmer_chat_id=1,
                                 transcript_original="x", status="validated"))
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(db.IntegrityError):
         _draft(parcel_alias="P9")
 
 
@@ -87,7 +84,7 @@ def test_update_field_rejects_bad_corrections(field, value, reason, by):
 def test_correction_needs_existing_record():
     with pytest.raises(KeyError):
         db.update_field(999, "quantity", "1", "r", "farmer")
-    with db._connect() as conn, pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(db.IntegrityError), db._connect() as conn:
         conn.execute("INSERT INTO corrections (record_id, field, reason, corrected_by, timestamp, before, after)"
                      " VALUES (999, 'quantity', 'r', 'farmer', 'now', '1', '2')")
 
@@ -95,13 +92,9 @@ def test_correction_needs_existing_record():
 def test_corrections_are_append_only_and_records_never_deleted():
     rid = _draft()
     db.update_field(rid, "quantity", "14", "typo", "farmer")
-    with db._connect() as conn:
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("DELETE FROM corrections")
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("UPDATE corrections SET after = '99'")
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("DELETE FROM field_log")
+    for statement in ("DELETE FROM corrections", "UPDATE corrections SET after = '99'", "DELETE FROM field_log"):
+        with pytest.raises(db.IntegrityError), db._connect() as conn:  # one transaction each
+            conn.execute(statement)
     cid = db.corrections_for(rid)[0]["id"]
     db.set_fewshot(cid, False)
     assert db.recent_corrections() == []

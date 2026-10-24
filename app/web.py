@@ -9,7 +9,6 @@ import base64
 import json
 import os
 import secrets
-import sqlite3
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -228,7 +227,7 @@ def correct(id: int, body: Correction) -> dict:
         db.update_field(id, body.field, body.value, body.reason, EXPERT)
     except (ValueError, ValidationError) as e:
         raise HTTPException(422, str(e))
-    except sqlite3.IntegrityError as e:  # e.g. a parcel that doesn't exist; the transaction rolled back
+    except db.IntegrityError as e:  # e.g. a parcel that doesn't exist; the transaction rolled back
         raise HTTPException(422, f"{body.field} = {body.value!r} is not allowed ({e})")
     db.update_status(id, "corrected", EXPERT)
     return get_record(id)
