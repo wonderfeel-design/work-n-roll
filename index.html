@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WORK_N_ROLL — WIP</title>
+<meta name="description" content="SA.TECH Field Voice — farmers talk, data gets structured. Hackathon build in progress.">
+<style>
+  :root {
+    --bg: #f4f1e8;
+    --ink: #1f2a1c;
+    --muted: #5d6656;
+    --line: #d6d0bd;
+    --card: #fbf9f3;
+    --accent: #2f5d3a;
+    --accent-ink: #ffffff;
+    --wip: #e2a63b;
+    --done: #2f5d3a;
+    --todo: #b6ae97;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141a12;
+      --ink: #e9ecdf;
+      --muted: #a3ab98;
+      --line: #2e3829;
+      --card: #1b2318;
+      --accent: #8fc79a;
+      --accent-ink: #10180e;
+      --wip: #f0b950;
+      --done: #8fc79a;
+      --todo: #55604d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 20px 40px; }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 12px; border: 1px solid var(--wip); border-radius: 999px;
+    color: var(--wip); font-size: 13px; letter-spacing: .08em;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wip); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+
+  h1 {
+    margin: 20px 0 8px;
+    font-size: clamp(44px, 11vw, 88px);
+    line-height: .95; letter-spacing: -.03em; font-weight: 800;
+  }
+  h1 span { color: var(--accent); }
+  .tagline { font-size: clamp(20px, 4vw, 26px); margin: 0 0 6px; font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 40px; max-width: 58ch; }
+
+  h2 {
+    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 40px 0 14px; font-weight: 600;
+  }
+
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step small { color: var(--muted); font-size: 14px; }
+  .step .n { color: var(--accent); font-size: 13px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+  .chip.out { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .arrow { color: var(--muted); align-self: center; }
+
+  ul.progress { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  ul.progress li {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: var(--card); border-top: 1px solid var(--line);
+  }
+  ul.progress li:first-child { border-top: 0; }
+  .st { width: 12px; height: 12px; border-radius: 50%; flex: none; border: 2px solid var(--todo); }
+  .st.done { background: var(--done); border-color: var(--done); }
+  .st.wip { background: var(--wip); border-color: var(--wip); }
+  .label { flex: 1; }
+  .tag { font-size: 12px; color: var(--muted); }
+
+  footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<main>
+  <span class="badge mono"><span class="dot" aria-hidden="true"></span>WORK IN PROGRESS</span>
+
+  <h1 class="mono">WORK<span>_N_</span>ROLL</h1>
+  <p class="tagline">Farmers talk. Data gets structured.</p>
+  <p class="sub">A Telegram voice agent that turns farmers' voice notes into CUE-ready field records, linked to the parcels declared in the DUN. Built for the open-source AI hackathon by SA.TECH.</p>
+
+  <h2>How it works</h2>
+  <div class="flow">
+    <div class="step"><span class="n mono">01</span><b>Speak</b><small>Voice note on Telegram</small></div>
+    <div class="step"><span class="n mono">02</span><b>Extract</b><small>Gemma 4 turns it into a record</small></div>
+    <div class="step"><span class="n mono">03</span><b>Confirm</b><small>Card + voice reply in your language</small></div>
+    <div class="step"><span class="n mono">04</span><b>Learn</b><small>Judge flags, agronomist corrects</small></div>
+  </div>
+
+  <h2>Languages</h2>
+  <div class="chips">
+    <span class="chip mono">EN</span><span class="chip mono">RU</span><span class="chip mono">CA</span><span class="chip mono">ES</span>
+    <span class="arrow" aria-hidden="true">→</span>
+    <span class="chip out">Declaration in Catalan + English</span>
+  </div>
+
+  <h2>Stack</h2>
+  <div class="chips">
+    <span class="chip">Gemma 4 E4B · open-weight</span>
+    <span class="chip">ElevenLabs TTS + Scribe</span>
+    <span class="chip">Telegram Bot API</span>
+    <span class="chip">Google Sheets</span>
+  </div>
+
+  <h2>Build progress</h2>
+  <ul class="progress">
+    <li><span class="st done" aria-label="done"></span><span class="label">Plan, user flow, data model</span><span class="tag mono">done</span></li>
+    <li><span class="st wip" aria-label="in progress"></span><span class="label">Repo + team setup</span><span class="tag mono">in progress</span></li>
+    <li><span class="st" aria-label="to do"></span><span class="label">Voice → Sheet row</span><span class="tag mono">to do</span></li>
+    <li><span class="st" aria-label="to do"></span><span class="label">Voice confirmation in the farmer's language</span><span class="tag mono">to do</span></li>
+    <li><span class="st" aria-label="to do"></span><span class="label">Judge + agronomist corrections</span><span class="tag mono">to do</span></li>
+    <li><span class="st" aria-label="to do"></span><span class="label">Demo</span><span class="tag mono">to do</span></li>
+  </ul>
+
+  <footer>
+    <span>© 2026 SA.TECH · Apache 2.0</span>
+    <span class="mono">Hackathon · 24 Oct 2026</span>
+  </footer>
+</main>
+</body>
+</html>
