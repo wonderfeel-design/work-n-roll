@@ -20,6 +20,7 @@ TODAY = dt.datetime.now(db.TZ).date().isoformat()
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(b, "speak", lambda text, lang: None)
+    monkeypatch.setattr(b, "VOICE_REPLIES", True)
     monkeypatch.delenv("AGRONOMIST_CHAT_ID", raising=False)
     db.init_db()
     seed.seed()
@@ -255,3 +256,19 @@ def test_real_name_is_stored(env):
     run(b.on_start(FakeMessage(bot, "/start"), state))
     run(b.on_name(FakeMessage(bot, "Joan Puig"), bot, state))
     assert db.get_farmer(CHAT)["name"] == "Joan Puig" and run(state.get_state()) is None
+
+
+def test_no_tts_call_without_ffmpeg(env, monkeypatch):
+    bot, state = env
+    calls = []
+    monkeypatch.setattr(b, "speak", lambda text, lang: calls.append(text) or "x.ogg")
+    monkeypatch.setattr(b, "VOICE_REPLIES", False)
+    run(b.say(bot, CHAT, "Saved.", "en"))
+    assert calls == [] and [t for _, t, _ in bot.sent] == ["Saved."]
+
+
+def test_voice_sent_when_available(env, monkeypatch):
+    bot, state = env
+    monkeypatch.setattr(b, "speak", lambda text, lang: "x.ogg")
+    run(b.say(bot, CHAT, "Saved.", "en"))
+    assert [t for _, t, _ in bot.sent] == ["Saved.", "<voice>"]

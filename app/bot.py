@@ -6,6 +6,7 @@ import asyncio
 import html
 import logging
 import os
+import shutil
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -28,6 +29,7 @@ router = Router()
 AUDIO_DIR = DATA_DIR / "audio"
 MAX_FOLLOWUPS = 2
 POLL_SECONDS = 10
+VOICE_REPLIES = shutil.which("ffmpeg") is not None   # speak() needs ffmpeg for Telegram's OGG/Opus
 
 # Missing field → question asked, in this order.
 QUESTIONS = {"parcel_alias": "ask_parcel", "date": "ask_date", "product": "ask_product",
@@ -122,11 +124,13 @@ def parcel_keyboard(lang: str) -> InlineKeyboardMarkup:
         for p in db.get_parcels()])
 
 
-async def say(bot: Bot, chat_id: int, text: str, lang: str, **kwargs) -> None:
-    """Text, plus voice when speak() can make it (None → text only)."""
-    await bot.send_message(chat_id, text, **kwargs)
+async def send_voice(bot: Bot, chat_id: int, text: str, lang: str) -> None:
+    """Voice version of a reply when speak() can make it (None → text only). Skipped without
+    ffmpeg: speak() would pay for TTS and then fail to convert it."""
+    if not VOICE_REPLIES:
+        return
     try:
-        path = await asyncio.to_thread(speak, html.unescape(text), lang)
+        path = await asyncio.to_thread(speak, text, lang)
     except Exception:
         log.exception("speak failed")
         path = None
@@ -134,15 +138,15 @@ async def say(bot: Bot, chat_id: int, text: str, lang: str, **kwargs) -> None:
         await bot.send_voice(chat_id, FSInputFile(path))
 
 
+async def say(bot: Bot, chat_id: int, text: str, lang: str, **kwargs) -> None:
+    """Text, plus voice when available."""
+    await bot.send_message(chat_id, text, **kwargs)
+    await send_voice(bot, chat_id, html.unescape(text), lang)
+
+
 async def send_card(bot: Bot, rec: Record) -> None:
     await bot.send_message(rec.farmer_chat_id, render_card(rec), reply_markup=card_keyboard(rec.id, rec.lang))
-    try:
-        path = await asyncio.to_thread(speak, card_summary(rec), rec.lang)
-    except Exception:
-        log.exception("speak failed")
-        path = None
-    if path:
-        await bot.send_voice(rec.farmer_chat_id, FSInputFile(path))
+    await send_voice(bot, rec.farmer_chat_id, card_summary(rec), rec.lang)
 
 
 async def message_text(message: Message, bot: Bot) -> tuple[str, str | None]:
@@ -429,6 +433,8 @@ async def poll_expert_changes(bot: Bot) -> None:
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    if not VOICE_REPLIES:
+        log.warning("ffmpeg not found: replies are text only (no TTS calls)")
     db.init_db()
     bot = Bot(os.environ["TELEGRAM_TOKEN"], default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
