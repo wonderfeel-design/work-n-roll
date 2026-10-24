@@ -244,7 +244,7 @@ def test_note_sent_instead_of_name_is_handled_as_note(env, monkeypatch):
     monkeypatch.setattr(gemma, "extract", lambda *a: ExtractionResult(
         records=[_ext(activity_key="irrigation", parcel_alias="P2", product=None, quantity=120, unit="m3")],
         is_farm_activity=True))
-    run(b.on_start(FakeMessage(bot, "/start"), state))
+    run(b.on_start(FakeMessage(bot, "/start"), bot, state))
     assert run(state.get_state()) == b.Onboarding.name.state
     run(b.on_name(FakeMessage(bot, "Watered the Gala block today, about 120 cubic metres."), bot, state))
     assert (db.get_farmer(CHAT) or {}).get("name") is None
@@ -253,7 +253,7 @@ def test_note_sent_instead_of_name_is_handled_as_note(env, monkeypatch):
 
 def test_real_name_is_stored(env):
     bot, state = env
-    run(b.on_start(FakeMessage(bot, "/start"), state))
+    run(b.on_start(FakeMessage(bot, "/start"), bot, state))
     run(b.on_name(FakeMessage(bot, "Joan Puig"), bot, state))
     assert db.get_farmer(CHAT)["name"] == "Joan Puig" and run(state.get_state()) is None
 
@@ -272,3 +272,24 @@ def test_voice_sent_when_available(env, monkeypatch):
     monkeypatch.setattr(b, "speak", lambda text, lang: "x.ogg")
     run(b.say(bot, CHAT, "Saved.", "en"))
     assert [t for _, t, _ in bot.sent] == ["Saved.", "<voice>"]
+
+
+def test_start_with_known_name_sends_welcome(env):
+    bot, state = env
+    db.set_farmer_name(CHAT, "Joan")
+    db.set_farmer_lang(CHAT, "ca")
+    run(b.on_start(FakeMessage(bot, "/start"), bot, state))
+    assert bot.sent[-1][1].startswith("Hola Joan!") and "Perera" in bot.sent[-1][1]
+
+
+def test_name_then_welcome_and_help(env):
+    bot, state = env
+    run(b.on_start(FakeMessage(bot, "/start"), bot, state))
+    assert bot.sent[-1][1] == db.ui("ask_name", "en")
+    run(b.on_name(FakeMessage(bot, "Tom"), bot, state))
+    welcome = bot.sent[-1][1]
+    assert welcome.startswith("Hi Tom!")
+    msg = FakeMessage(bot, "/help")
+    msg.from_user.first_name = "Tommy"
+    run(b.on_help(msg, bot))
+    assert bot.sent[-1][1] == welcome          # same message, stored name wins

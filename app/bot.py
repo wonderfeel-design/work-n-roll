@@ -3,6 +3,7 @@
 Run: python -m app.bot
 """
 import asyncio
+import datetime as dt
 import html
 import logging
 import os
@@ -10,7 +11,7 @@ import shutil
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -30,6 +31,9 @@ AUDIO_DIR = DATA_DIR / "audio"
 MAX_FOLLOWUPS = 2
 POLL_SECONDS = 10
 VOICE_REPLIES = shutil.which("ffmpeg") is not None   # speak() needs ffmpeg for Telegram's OGG/Opus
+
+HAS_REPORT = False   # set True once the bot has a /report command (then func_report is shown)
+CROP_ICON = {"peach": "🍑", "apple": "🍎", "pear": "🍐", "olive": "🫒", "almond": "🌰"}
 
 # Missing field → question asked, in this order.
 QUESTIONS = {"parcel_alias": "ask_parcel", "date": "ask_date", "product": "ask_product",
@@ -235,16 +239,55 @@ def looks_like_note(text: str) -> bool:
     return len(text.split()) > 4 or any(ch.isdigit() for ch in text)
 
 
+def records_today(chat_id: int) -> int:
+    """Records this farmer created today (Europe/Madrid), any status except discarded."""
+    today = dt.datetime.now(db.TZ).date().isoformat()
+    return sum(1 for r in db.list_records(limit=10000)
+               if r.farmer_chat_id == chat_id and r.status != "discarded" and (r.created_at or "")[:10] == today)
+
+
+def welcome_text(chat_id: int, lang: str, name: str) -> str:
+    """The /start and /help message. Every farmer-facing line comes from ui_strings."""
+    today = dt.datetime.now(db.TZ).date()
+    date = today.strftime("%d.%m.%Y" if lang == "ru" else "%d/%m/%Y")
+    parcels = db.get_parcels()
+    campaign = parcels[0]["campaign"] if parcels else ""
+    parcel_lines = [f"{CROP_ICON.get(p['crop_key'], '🌱')} {p['alias']} · {db.label('crop', p['crop_key'], lang)}"
+                    f" · {p['area_ha']:.2f} ha" for p in parcels]
+    functions = ["func_voice", "func_confirm"] + (["func_report"] if HAS_REPORT else []) + ["func_help"]
+    lines = [db.ui("start_hello", lang).format(name=name, date=date), "",
+             db.ui("start_parcels", lang).format(campaign=campaign), *parcel_lines, "",
+             db.ui("start_today", lang).format(n=records_today(chat_id)), "",
+             db.ui("start_functions", lang), *(db.ui(k, lang) for k in functions), "",
+             db.ui("start_example", lang)]
+    return "\n".join(lines)
+
+
+async def send_welcome(bot: Bot, chat_id: int, telegram_lang: str | None = None,
+                       fallback_name: str | None = None) -> None:
+    lang = farmer_lang(chat_id, telegram_lang)
+    name = (db.get_farmer(chat_id) or {}).get("name") or fallback_name or ""
+    await bot.send_message(chat_id, html.escape(welcome_text(chat_id, lang, name)))
+
+
 @router.message(CommandStart())
-async def on_start(message: Message, state: FSMContext) -> None:
-    lang = farmer_lang(message.chat.id, message.from_user and message.from_user.language_code)
+async def on_start(message: Message, bot: Bot, state: FSMContext) -> None:
+    user = message.from_user
+    lang = farmer_lang(message.chat.id, user and user.language_code)
     farmer = db.get_farmer(message.chat.id)
     if farmer and farmer.get("name"):
-        await message.answer(db.ui("welcome", lang))
+        await state.clear()
+        await send_welcome(bot, message.chat.id, user and user.language_code)
         return
     db.set_farmer_lang(message.chat.id, lang)
     await state.set_state(Onboarding.name)
     await message.answer(db.ui("ask_name", lang))
+
+
+@router.message(Command("help"))
+async def on_help(message: Message, bot: Bot) -> None:
+    user = message.from_user
+    await send_welcome(bot, message.chat.id, user and user.language_code, user and user.first_name)
 
 
 @router.message(Onboarding.name, F.text)
@@ -256,7 +299,7 @@ async def on_name(message: Message, bot: Bot, state: FSMContext) -> None:
         return
     db.set_farmer_name(message.chat.id, text[:80])
     await state.clear()
-    await message.answer(db.ui("welcome", farmer_lang(message.chat.id)))
+    await send_welcome(bot, message.chat.id)
 
 
 @router.message(FollowUp.answer, F.text | F.voice | F.audio)
