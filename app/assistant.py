@@ -6,9 +6,11 @@ The model never queries the database itself: this module computes the numbers in
 average dose per hectare by product, parcel and month) and hands the model the records plus those
 aggregates. It only reads and phrases, so arithmetic is exact and the database stays read-only.
 
-Model: ASSISTANT_MODEL (default gemini-3.5-flash, ~1.5 s with minimal thinking). Gemma 4 is the fallback;
-it answers correctly too but thinks for 12-18 s on every question and that can't be switched off on the
-Gemini API, which is too slow for a spoken conversation. The bot's extraction still uses Gemma.
+Models: ASSISTANT_MODELS, tried in order (default gemini-3.5-flash, gemini-3.1-flash-lite,
+gemini-3.5-flash-lite, then Gemma 4). Flash answers in ~1.5-2 s with minimal thinking. Gemma answers correctly
+too but thinks for 12-18 s on every question, which can't be switched off on the Gemini API: too slow for a
+spoken conversation, so it is the last resort. A model that reports its daily free quota used up is skipped
+until the quota resets. The bot's extraction still uses Gemma.
 """
 import datetime as dt
 import json
@@ -22,9 +24,13 @@ from app import DATA_DIR, db
 
 log = logging.getLogger(__name__)
 
-MODEL = os.getenv("ASSISTANT_MODEL") or "gemini-3.5-flash"
-FALLBACK_MODEL = os.getenv("GEMMA_MODEL") or "gemma-4-26b-a4b-it"
-TIMEOUT_S = float(os.getenv("ASSISTANT_TIMEOUT_S", "30"))
+# Tried in order. The free tier allows ~20 requests per day *per model*, so several Flash models with
+# separate allowances keep the assistant answering; Gemma last (slow, but rarely out of quota).
+MODELS = tuple(m.strip() for m in (os.getenv("ASSISTANT_MODELS") or
+               "gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.5-flash-lite,gemma-4-26b-a4b-it").split(",") if m.strip())
+TIMEOUT_S = float(os.getenv("ASSISTANT_TIMEOUT_S", "15"))   # per Gemini model; Gemma gets GEMMA_TIMEOUT_S
+GEMMA_TIMEOUT_S = float(os.getenv("GEMMA_TIMEOUT_S", "30"))
+_exhausted: dict[str, float] = {}   # model -> time.time() when its daily quota resets
 LOG_PATH = DATA_DIR / "logs" / "assistant.jsonl"
 LANG_NAMES = {"en": "English", "ru": "Russian", "ca": "Catalan", "es": "Spanish"}
 HISTORY_TURNS = 6
@@ -149,16 +155,38 @@ def _log(entry: dict) -> None:
         log.exception("could not write %s", LOG_PATH)
 
 
+def _quota_reset(error: Exception) -> float | None:
+    """For a 429 'per day' quota error, the time.time() when it resets; None for any other error."""
+    msg = str(error)
+    if "RESOURCE_EXHAUSTED" not in msg or "PerDay" not in msg:
+        return None
+    m = re.search(r"'retryDelay': '(\d+)s'", msg)
+    return time.time() + (int(m.group(1)) if m else 3600)
+
+
+def available_models() -> list[str]:
+    now = time.time()
+    return [m for m in MODELS if _exhausted.get(m, 0) <= now]
+
+
 def answer(question: str, lang: str, history: list[dict] | None = None) -> str:
-    """Gemma's answer, in `lang`. Raises AssistantError when every attempt fails."""
+    """The first answer from MODELS, in `lang`. Models out of daily quota are skipped until they reset.
+
+    Raises AssistantError when every model fails.
+    """
     from google.genai import types
 
     prompt = build_prompt(question, lang, history)
-    http = types.HttpOptions(timeout=int(TIMEOUT_S * 1000))
     errors = []
-    for model in dict.fromkeys((MODEL, FALLBACK_MODEL)):
+    models = available_models()
+    if not models:
+        raise AssistantError("every assistant model is out of its daily free quota; try again later "
+                             "or enable billing on the Gemini API key")
+    for model in models:
         # Gemini models take a thinking level; Gemma rejects any thinking setting
-        thinking = None if model.startswith("gemma") else types.ThinkingConfig(thinking_level="minimal")
+        gemma = model.startswith("gemma")
+        thinking = None if gemma else types.ThinkingConfig(thinking_level="minimal")
+        http = types.HttpOptions(timeout=int((GEMMA_TIMEOUT_S if gemma else TIMEOUT_S) * 1000))
         config = types.GenerateContentConfig(temperature=0.2, http_options=http, thinking_config=thinking)
         started = time.monotonic()
         try:
@@ -167,7 +195,11 @@ def answer(question: str, lang: str, history: list[dict] | None = None) -> str:
             if not text:
                 raise AssistantError("empty answer")
         except Exception as e:
-            errors.append(f"{model}: {e}")
+            if (reset := _quota_reset(e)) is not None:
+                _exhausted[model] = reset
+                errors.append(f"{model}: daily quota used up")
+            else:
+                errors.append(f"{model}: {str(e)[:160]}")
             _log({"model": model, "ok": False, "ms": round((time.monotonic() - started) * 1000),
                   "question": question, "error": str(e)[:300]})
             continue
