@@ -140,6 +140,19 @@ Designed, not in the 3-hour MVP:
 
 ## Running locally
 
+With Docker (needs only Docker Desktop):
+
+```bash
+cp .env.example .env                       # fill in keys
+docker compose up --build                  # seed, then the console on http://localhost:8000
+docker compose --profile bot up --build    # also the Telegram bot
+docker compose down                        # stop; add -v to also delete the database volume
+```
+
+One image runs every process. Keys are read from `.env` at start and never copied into the image. The database, audio and exports live in the `fieldvoice-data` volume. The console listens on `127.0.0.1` only.
+
+Without Docker:
+
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp .env.example .env                       # fill in keys

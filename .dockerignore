@@ -1,0 +1,20 @@
+# Secrets are passed at runtime via env_file, never baked into the image
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.DS_Store
+
+# Runtime data lives in the fieldvoice-data volume
+data/*.db
+data/*.db-*
+data/audio
+data/tts
+data/logs
+data/exports
