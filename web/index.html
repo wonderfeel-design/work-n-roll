@@ -118,6 +118,7 @@
     <span class="seg" role="group" aria-label="Language">
       <button class="btn" data-lang="ca">CA</button><button class="btn" data-lang="en">EN</button>
     </span>
+    <a class="btn primary" id="report" href="api/report.xlsx" download></a>
   </div>
 </header>
 
@@ -143,7 +144,7 @@
 const T = {
   ca: {
     subtitle: "Consola de l'agrònom", live: "en directe", paused: "en pausa (corregint)", offline: "sense connexió",
-    review: "Només pendents", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
+    review: "Només pendents", report: "Descarrega l'informe", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
     emptyReview: "Res pendent de revisió.", corrTitle: "El que aprèn el model", noCorr: "Encara no hi ha correccions.",
     cols: ["Data", "Pagès", "Parcel·la", "Cultiu", "Activitat", "Producte", "Quantitat", "Dosi/ha",
            "Estat", "Jutge", "Transcripció original"],
@@ -158,7 +159,7 @@ const T = {
   },
   en: {
     subtitle: "Agronomist console", live: "live", paused: "paused (correcting)", offline: "offline",
-    review: "Needs review only", empty: "No records yet. Send a voice note to the bot.",
+    review: "Needs review only", report: "Download report", empty: "No records yet. Send a voice note to the bot.",
     emptyReview: "Nothing needs review.", corrTitle: "What the model learns from", noCorr: "No corrections yet.",
     cols: ["Date", "Farmer", "Parcel", "Crop", "Activity", "Product", "Quantity", "Dose/ha",
            "Status", "Judge", "Original transcript"],
@@ -209,6 +210,7 @@ function renderChrome() {
   document.documentElement.lang = state.lang;
   $("subtitle").textContent = t().subtitle;
   $("corr-title").textContent = t().corrTitle;
+  $("report").textContent = `⬇ ${t().report}`;
   $("head").innerHTML = t().cols.map(c => `<th>${esc(c)}</th>`).join("");
   for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", b.dataset.lang === state.lang);
   $("review").setAttribute("aria-pressed", state.reviewOnly);
