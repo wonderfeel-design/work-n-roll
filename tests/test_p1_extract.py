@@ -4,6 +4,7 @@ import json
 import os
 
 import pytest
+from google.genai.errors import ClientError
 
 from app import db, gemma, seed
 from app.schemas import Extracted
@@ -13,6 +14,7 @@ from app.schemas import Extracted
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(gemma, "LOG_PATH", tmp_path / "gemma.jsonl")
+    monkeypatch.setattr(gemma, "_plain_json", set())
     db.init_db()
     seed.seed()
 
@@ -98,11 +100,54 @@ def test_retry_then_fallback_model(monkeypatch):
 def test_plain_json_when_json_mode_rejected(monkeypatch):
     def fake(model, prompt, schema, structured):
         if structured:
-            raise RuntimeError("400 JSON mode is not enabled for this model")
+            raise ClientError(400, {"error": {"message": "JSON mode is not enabled for this model"}})
         return "```json\n" + _answer() + "\n```"
 
     monkeypatch.setattr(gemma, "_generate", fake)
     assert gemma.extract("x", None, 1).records[0].parcel_alias == "P3"
+
+
+def test_plain_json_is_remembered(monkeypatch):
+    calls = []
+
+    def fake(model, prompt, schema, structured):
+        calls.append(structured)
+        if structured:
+            raise ClientError(400, {"error": {"message": "JSON mode is not enabled for this model"}})
+        return _answer()
+
+    monkeypatch.setattr(gemma, "_generate", fake)
+    gemma.extract("x", None, 1)
+    gemma.extract("x", None, 1)
+    assert calls == [True, False, False]
+
+
+def test_timeout_moves_on_without_plain_retry(monkeypatch):
+    calls = []
+
+    def fake(model, prompt, schema, structured):
+        calls.append((model, structured))
+        if model == gemma.MODEL:
+            raise TimeoutError("The read operation timed out")
+        return _answer()
+
+    monkeypatch.setattr(gemma, "_generate", fake)
+    gemma.extract("x", None, 1)
+    assert calls == [(gemma.MODEL, True), (gemma.MODEL, True), (gemma.FALLBACK_MODEL, True)]
+
+
+def test_server_error_does_not_switch_to_plain_json(monkeypatch):
+    calls = []
+
+    def fake(model, prompt, schema, structured):
+        calls.append(structured)
+        if len(calls) == 1:
+            raise RuntimeError("500 INTERNAL")
+        return _answer()
+
+    monkeypatch.setattr(gemma, "_generate", fake)
+    gemma.extract("x", None, 1)
+    assert calls == [True, True] and gemma._plain_json == set()
 
 
 def test_all_attempts_fail(monkeypatch):

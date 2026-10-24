@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -17,11 +18,13 @@ log = logging.getLogger(__name__)
 
 MODEL = os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
 FALLBACK_MODEL = "gemma-4-31b-it"
+TIMEOUT_S = float(os.getenv("GEMMA_TIMEOUT_S", "30"))   # per request; a hung call fails, then retries
 PROMPTS = ROOT / "app" / "prompts"
 LOG_PATH = DATA_DIR / "logs" / "gemma.jsonl"
 
 M = TypeVar("M", bound=BaseModel)
 _client = None
+_plain_json: set[str] = set()   # models that rejected JSON mode: go straight to plain JSON next time
 
 
 class GemmaError(RuntimeError):
@@ -104,41 +107,51 @@ def _parse(text: str, schema: type[M]) -> M:
 
 def _generate(model: str, prompt: str, schema: type[M], structured: bool) -> str:
     from google.genai import types
+    http = types.HttpOptions(timeout=int(TIMEOUT_S * 1000))
     if structured:
         config = types.GenerateContentConfig(temperature=0, response_mime_type="application/json",
-                                             response_schema=schema)
+                                             response_schema=schema, http_options=http)
     else:  # fallback when the model rejects JSON mode: describe the schema in the prompt
         prompt += ("\n\nReply with only one JSON object matching this JSON schema, no other text:\n"
                    + json.dumps(schema.model_json_schema()))
-        config = types.GenerateContentConfig(temperature=0)
+        config = types.GenerateContentConfig(temperature=0, http_options=http)
     resp = _get_client().models.generate_content(model=model, contents=prompt, config=config)
     return resp.text or ""
 
 
 def call(prompt: str, schema: type[M], kind: str) -> M:
-    """Try MODEL twice, then FALLBACK_MODEL. Each try uses JSON mode, falling back to plain JSON
-    instructions if the API rejects JSON mode for that model."""
+    """Up to 3 attempts: MODEL, MODEL, FALLBACK_MODEL, each with a TIMEOUT_S limit. JSON mode
+    first; if the API refuses the request (4xx), the same attempt retries once with plain JSON
+    instructions and that model skips JSON mode from then on. Timeouts and 5xx move on."""
     errors = []
     for model in (MODEL, MODEL, FALLBACK_MODEL):
-        for structured in (True, False):
-            raw = None
+        modes = (False,) if model in _plain_json else (True, False)
+        for structured in modes:
+            raw, started, rejected = None, time.monotonic(), False
             try:
                 raw = _generate(model, prompt, schema, structured)
                 result = _parse(raw, schema)
-                _log({"kind": kind, "model": model, "structured": structured, "prompt": prompt,
-                      "response": raw, "ok": True})
+                if not structured:
+                    _plain_json.add(model)
+                _log({"kind": kind, "model": model, "structured": structured, "seconds": _since(started),
+                      "prompt": prompt, "response": raw, "ok": True})
                 return result
-            except ValidationError as e:     # model answered but not valid JSON: retry / fall back
+            except ValidationError as e:     # model answered but not valid JSON: next attempt
                 err = f"invalid JSON: {e.error_count()} errors"
-            except Exception as e:           # API error, e.g. JSON mode not supported for the model
+            except Exception as e:           # API error or timeout
                 err = f"{type(e).__name__}: {e}"
-            _log({"kind": kind, "model": model, "structured": structured, "prompt": prompt,
-                  "response": raw, "ok": False, "error": err})
+                rejected = 400 <= (getattr(e, "code", None) or 0) < 500   # e.g. JSON mode not supported
+            _log({"kind": kind, "model": model, "structured": structured, "seconds": _since(started),
+                  "prompt": prompt, "response": raw, "ok": False, "error": err})
             errors.append(f"{model} structured={structured}: {err}")
             log.warning("gemma %s failed: %s", kind, errors[-1])
-            if raw is not None:
-                break  # the API accepted the request; plain-JSON mode won't fix a bad answer
+            if not rejected:
+                break  # plain-JSON mode only helps when the request itself was refused (4xx)
     raise GemmaError("; ".join(errors))
+
+
+def _since(started: float) -> float:
+    return round(time.monotonic() - started, 2)
 
 
 # --- public API ----------------------------------------------------------------
