@@ -9,6 +9,7 @@ import os
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -16,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, ValidationError
 
-from app import ROOT, db
+from app import ROOT, db, export
 from app.schemas import STATUS_TRANSITIONS, Record
 
 INDEX_HTML = ROOT / "web" / "index.html"
@@ -124,6 +125,14 @@ def parcels() -> list[dict]:
 @api.get("/vocabulary")
 def vocabulary() -> list[dict]:
     return db.get_vocabulary()
+
+
+@api.get("/report.xlsx")
+def report() -> FileResponse:
+    """Excel report in the sample workbook's layout (Task 5), built fresh on every request."""
+    path = Path(export.build_report())
+    return FileResponse(path, filename=path.name, headers={"Cache-Control": "no-store"},
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # --- write ---------------------------------------------------------------------
