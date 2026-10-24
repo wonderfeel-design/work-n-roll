@@ -226,6 +226,11 @@ async def handle_note(message: Message, bot: Bot, state: FSMContext, text: str, 
 
 # --- handlers ------------------------------------------------------------------
 
+def looks_like_note(text: str) -> bool:
+    """A name is a few words without digits; anything longer is treated as a field note."""
+    return len(text.split()) > 4 or any(ch.isdigit() for ch in text)
+
+
 @router.message(CommandStart())
 async def on_start(message: Message, state: FSMContext) -> None:
     lang = farmer_lang(message.chat.id, message.from_user and message.from_user.language_code)
@@ -239,8 +244,13 @@ async def on_start(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Onboarding.name, F.text)
-async def on_name(message: Message, state: FSMContext) -> None:
-    db.set_farmer_name(message.chat.id, message.text.strip()[:80])
+async def on_name(message: Message, bot: Bot, state: FSMContext) -> None:
+    text = message.text.strip()
+    if looks_like_note(text):           # farmer skipped the name and went straight to a note
+        await state.clear()
+        await handle_note(message, bot, state, text, None)
+        return
+    db.set_farmer_name(message.chat.id, text[:80])
     await state.clear()
     await message.answer(db.ui("welcome", farmer_lang(message.chat.id)))
 

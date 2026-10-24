@@ -236,3 +236,22 @@ def test_failed_transcription_answers_not_understood(env, monkeypatch, tmp_path)
     run(b.on_note(msg, bot, state))
     assert bot.sent[-1][1] == db.ui("not_understood", "en")
     assert db.list_records() == []
+
+
+def test_note_sent_instead_of_name_is_handled_as_note(env, monkeypatch):
+    bot, state = env
+    monkeypatch.setattr(gemma, "extract", lambda *a: ExtractionResult(
+        records=[_ext(activity_key="irrigation", parcel_alias="P2", product=None, quantity=120, unit="m3")],
+        is_farm_activity=True))
+    run(b.on_start(FakeMessage(bot, "/start"), state))
+    assert run(state.get_state()) == b.Onboarding.name.state
+    run(b.on_name(FakeMessage(bot, "Watered the Gala block today, about 120 cubic metres."), bot, state))
+    assert (db.get_farmer(CHAT) or {}).get("name") is None
+    assert len(db.list_records()) == 1 and "New record" in bot.sent[-1][1]
+
+
+def test_real_name_is_stored(env):
+    bot, state = env
+    run(b.on_start(FakeMessage(bot, "/start"), state))
+    run(b.on_name(FakeMessage(bot, "Joan Puig"), bot, state))
+    assert db.get_farmer(CHAT)["name"] == "Joan Puig" and run(state.get_state()) is None
