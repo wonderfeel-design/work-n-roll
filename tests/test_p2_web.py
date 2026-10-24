@@ -120,3 +120,15 @@ def test_missing_record(client):
 def test_reference_data(client):
     assert len(client.get("/api/parcels", auth=AUTH).json()) == 5
     assert any(v["key"] == "almond" for v in client.get("/api/vocabulary", auth=AUTH).json())
+
+
+def test_branding_and_public_icons(client):
+    r = client.get("/api/records")
+    assert r.status_code == 401 and r.headers["www-authenticate"] == 'Basic realm="Work\'n\'Roll"'
+    for name in ("favicon-64.png", "icon-512.png", "logo.png"):      # browsers fetch these without the login
+        icon = client.get(f"/static/{name}")
+        assert icon.status_code == 200 and icon.headers["content-type"] == "image/png", name
+    page = client.get("/", auth=AUTH).text
+    assert "<title>Work'n'Roll · Epic Reporting</title>" in page and 'href="static/favicon-64.png"' in page
+    assert "Field Voice" not in page
+    assert client.get("/static/../app/db.py").status_code == 404           # only the icon folder is public

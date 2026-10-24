@@ -1,9 +1,9 @@
-"""Agronomist console API (Person 2, Task 3).
+"""Work'n'Roll · Epic Reporting: the agronomist console API (Person 2, Tasks 3-6).
 
     uvicorn app.web:app --port 8000      -> http://localhost:8000  (WEB_USER / WEB_PASSWORD, default admin / admin)
 
-The bot writes to the same SQLite file from its own process; the page polls /api/records every 2 s.
-Everything except /api/health needs the login. The console always acts as the agronomist.
+The bot writes to the same PostgreSQL database from its own process; the page polls /api/records every 2 s.
+Everything except /api/health and the icons in /static needs the login. The console always acts as the agronomist.
 """
 import base64
 import json
@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, ValidationError
 
@@ -24,19 +25,21 @@ from app import ROOT, assistant, db, export, voice
 from app.schemas import LANGS, STATUS_TRANSITIONS, Record
 
 INDEX_HTML = ROOT / "web" / "index.html"
+STATIC_DIR = ROOT / "web" / "static"  # app icons: public, browsers fetch favicons without the login
+REALM = "Work'n'Roll"
 EXPERT = "agronomist"
 # What the agronomist may correct from the console (a subset of schemas.EDITABLE_FIELDS)
 WEB_EDITABLE = ("date", "parcel_alias", "activity_key", "product", "target_pest_key",
                 "quantity", "unit", "area_ha", "notes_ca", "notes_en")
 
-security = HTTPBasic(realm="Field Voice")
+security = HTTPBasic(realm=REALM)
 
 
 def require_login(creds: HTTPBasicCredentials = Depends(security)) -> str:
     ok_user = secrets.compare_digest(creds.username.encode(), os.getenv("WEB_USER", "admin").encode())
     ok_pass = secrets.compare_digest(creds.password.encode(), os.getenv("WEB_PASSWORD", "admin").encode())
     if not (ok_user and ok_pass):
-        raise HTTPException(401, "Wrong user or password", headers={"WWW-Authenticate": 'Basic realm="Field Voice"'})
+        raise HTTPException(401, "Wrong user or password", headers={"WWW-Authenticate": f'Basic realm="{REALM}"'})
     return creds.username
 
 
@@ -46,7 +49,8 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Field Voice · agronomist console", lifespan=lifespan)
+app = FastAPI(title="Work'n'Roll · Epic Reporting", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 api = APIRouter(prefix="/api", dependencies=[Depends(require_login)])
 
 
