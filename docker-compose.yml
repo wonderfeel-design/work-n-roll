@@ -1,5 +1,4 @@
-# docker compose up --build              -> seed, then web on http://localhost:8000
-# docker compose --profile bot up --build -> also the Telegram bot (once app/bot.py exists)
+# docker compose up --build   -> seed, then web on http://localhost:8000 and the Telegram bot
 name: fieldvoice
 
 x-app: &app
@@ -42,7 +41,6 @@ services:
       seed:
         condition: service_completed_successfully
     restart: unless-stopped
-    profiles: ["bot"]  # TODO(P1): remove once app/bot.py lands on main
 
 volumes:
   fieldvoice-data:

@@ -145,8 +145,7 @@ With Docker (needs only Docker Desktop):
 
 ```bash
 cp .env.example .env                       # fill in keys
-docker compose up --build                  # seed, then the console on http://localhost:8000
-docker compose --profile bot up --build    # also the Telegram bot
+docker compose up --build                  # seed, the console on http://localhost:8000, the bot
 docker compose down                        # stop; add -v to also delete the database volume
 ```
 
