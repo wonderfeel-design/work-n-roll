@@ -150,6 +150,19 @@ def test_server_error_does_not_switch_to_plain_json(monkeypatch):
     assert calls == [True, True] and gemma._plain_json == set()
 
 
+@pytest.mark.parametrize("spoken,days", [("Сегодня", 0), ("ahir", -1), ("abans d'ahir", -2), ("Ayer", -1),
+                                         ("позавчера", -2), ("this morning", None), (None, None)])
+def test_resolve_relative_date(spoken, days):
+    want = None if days is None else (_today() + dt.timedelta(days=days)).isoformat()
+    assert gemma.resolve_relative_date(spoken) == want
+
+
+def test_empty_date_is_resolved_from_spoken_words(monkeypatch):
+    monkeypatch.setattr(gemma, "_generate", lambda *a: _answer(date=None, date_spoken="Сегодня"))
+    r = gemma.extract("x", None, 1).records[0]
+    assert r.date == _today().isoformat() and "date" not in r.missing_fields
+
+
 def test_all_attempts_fail(monkeypatch):
     monkeypatch.setattr(gemma, "_generate", lambda *a: "nope")
     with pytest.raises(gemma.GemmaError):
