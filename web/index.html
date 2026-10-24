@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Voice · Agronomist console</title>
+<style>
+  :root {
+    --bg: #f4f1e8; --card: #fbf9f3; --ink: #1f2a1c; --muted: #5d6656; --line: #d6d0bd; --hover: #efe9d8;
+    --accent: #2f5d3a; --accent-ink: #fff;
+    --amber: #b8660b; --amber-bg: #fbe9cf; --green: #2c7a3f; --green-bg: #dcefd9;
+    --blue: #2a5fb8; --blue-bg: #dde7f8; --grey: #7b7f78; --grey-bg: #e7e6e1;
+    --new: #fff3b8; --danger: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141a12; --card: #1b2318; --ink: #e9ecdf; --muted: #a3ab98; --line: #2e3829; --hover: #232d1f;
+      --accent: #8fc79a; --accent-ink: #10180e;
+      --amber: #f0b050; --amber-bg: #3d2c12; --green: #82cf93; --green-bg: #1d3420;
+      --blue: #8db2f2; --blue-bg: #1b2a45; --grey: #9a9d96; --grey-bg: #2a2e28;
+      --new: #4a4220; --danger: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, select, input { font: inherit; color: inherit; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between;
+           padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+  h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { border: 1px solid var(--line); background: var(--card); padding: 6px 12px; border-radius: 6px;
+         cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .btn:hover { background: var(--hover); }
+  .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.small { padding: 2px 9px; font-size: 12.5px; }
+  .seg { display: inline-flex; }
+  .seg .btn { border-radius: 0; }
+  .seg .btn:first-child { border-radius: 6px 0 0 6px; }
+  .seg .btn:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .live.paused::before { background: var(--amber); }
+  .live.off::before { background: var(--danger); }
+  .count { opacity: .75; margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px 20px; align-items: start; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+  .scroll { overflow: auto; max-height: calc(100vh - 130px); }
+  /* Laptop widths: corrections go under the table so all columns fit */
+  @media (max-width: 1500px) {
+    main { grid-template-columns: 1fr; }
+    .scroll { max-height: none; }
+    #corrections { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .corr { border-right: 1px solid var(--line); }
+  }
+
+  table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { position: sticky; top: 0; z-index: 1; background: var(--card); font-size: 11px; font-weight: 600;
+       text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
+  td { white-space: nowrap; }
+  td.num { text-align: right; }
+  td.wrap { white-space: normal; min-width: 170px; max-width: 260px; }
+  td.mid { white-space: normal; min-width: 120px; max-width: 170px; }
+  .sub { display: block; font-size: 12px; color: var(--muted); }
+  .say { font-style: italic; color: var(--muted); }
+  .tag { display: inline-block; font: 600 11px ui-monospace, monospace; padding: 1px 5px; border-radius: 3px;
+         background: var(--grey-bg); color: var(--muted); text-transform: uppercase; }
+  tr.new td { animation: flash 3s ease-out; }
+  @keyframes flash { from { background: var(--new); } to { background: transparent; } }
+  tr.discarded td { opacity: .55; }
+  tr.needs_review td:first-child { box-shadow: inset 3px 0 var(--amber); }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+  .status { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+            background: var(--grey-bg); color: var(--grey); }
+  .s-needs_review { background: var(--amber-bg); color: var(--amber); }
+  .s-auto_approved, .s-validated { background: var(--green-bg); color: var(--green); }
+  .s-corrected { background: var(--blue-bg); color: var(--blue); }
+  .s-draft, .s-farmer_confirmed { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+  .score { font-weight: 700; }
+  .score.low { color: var(--amber); }
+  .actions { display: flex; gap: 4px; margin-top: 6px; }
+  .fix .actions { margin-top: 0; }
+
+  tr.form td { background: var(--hover); white-space: normal; }
+  .fix { display: grid; grid-template-columns: 180px 220px minmax(220px, 1fr) auto; gap: 8px; align-items: end; }
+  @media (max-width: 800px) { .fix { grid-template-columns: 1fr; } }
+  .fix label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .fix input, .fix select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
+                            background: var(--card); }
+  .fix input:focus, .fix select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .fix .err { grid-column: 1 / -1; color: var(--danger); font-size: 13px; }
+  .fix .was { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+
+  aside h2 { margin: 0; padding: 12px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); border-bottom: 1px solid var(--line); }
+  .corr { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .corr:last-child { border-bottom: 0; }
+  .corr .head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+  .corr .chg { margin: 4px 0; font: 13px ui-monospace, monospace; }
+  .corr .chg s { color: var(--muted); }
+  .corr p { margin: 0; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 8px 14px; border-radius: 6px;
+           background: var(--ink); color: var(--bg); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Field Voice <small id="subtitle"></small></h1>
+  <div class="bar">
+    <span class="live" id="live"></span>
+    <button class="btn" id="review" aria-pressed="false"></button>
+    <span class="seg" role="group" aria-label="Language">
+      <button class="btn" data-lang="ca">CA</button><button class="btn" data-lang="en">EN</button>
+    </span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="scroll">
+      <table>
+        <thead><tr id="head"></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden></div>
+    </div>
+  </section>
+  <aside class="panel">
+    <h2 id="corr-title"></h2>
+    <div class="scroll" id="corrections"></div>
+  </aside>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+// Agronomist console (Person 2, Task 4). Talks only to /api/* on this server; the browser reuses the login.
+const T = {
+  ca: {
+    subtitle: "Consola de l'agrònom", live: "en directe", paused: "en pausa (corregint)", offline: "sense connexió",
+    review: "Només pendents", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
+    emptyReview: "Res pendent de revisió.", corrTitle: "El que aprèn el model", noCorr: "Encara no hi ha correccions.",
+    cols: ["Data", "Pagès", "Parcel·la", "Cultiu", "Activitat", "Producte", "Quantitat", "Dosi/ha",
+           "Estat", "Jutge", "Transcripció original"],
+    approve: "Aprova", correct: "Corregeix", field: "Camp", value: "Valor nou", reason: "Motiu (obligatori)",
+    save: "Desa", cancel: "Cancel·la", was: "Valor actual", reasonNeeded: "Cal un motiu: és el que aprèn el model.",
+    approved: "aprovat", corrected: "corregit", by: "per",
+    status: { draft: "esborrany", farmer_confirmed: "confirmat pel pagès", auto_approved: "aprovat automàticament",
+              needs_review: "pendent de revisió", validated: "validat", corrected: "corregit", discarded: "descartat" },
+    fields: { date: "Data", parcel_alias: "Parcel·la", activity_key: "Activitat", product: "Producte",
+              target_pest_key: "Plaga / objectiu", quantity: "Quantitat", unit: "Unitat", area_ha: "Superfície (ha)",
+              notes_ca: "Notes (CA)", notes_en: "Notes (EN)" },
+  },
+  en: {
+    subtitle: "Agronomist console", live: "live", paused: "paused (correcting)", offline: "offline",
+    review: "Needs review only", empty: "No records yet. Send a voice note to the bot.",
+    emptyReview: "Nothing needs review.", corrTitle: "What the model learns from", noCorr: "No corrections yet.",
+    cols: ["Date", "Farmer", "Parcel", "Crop", "Activity", "Product", "Quantity", "Dose/ha",
+           "Status", "Judge", "Original transcript"],
+    approve: "Approve", correct: "Correct", field: "Field", value: "New value", reason: "Reason (required)",
+    save: "Save", cancel: "Cancel", was: "Current value", reasonNeeded: "A reason is required: it is what the model learns from.",
+    approved: "approved", corrected: "corrected", by: "by",
+    status: { draft: "draft", farmer_confirmed: "farmer confirmed", auto_approved: "auto-approved",
+              needs_review: "needs review", validated: "validated", corrected: "corrected", discarded: "discarded" },
+    fields: { date: "Date", parcel_alias: "Parcel", activity_key: "Activity", product: "Product",
+              target_pest_key: "Pest / target", quantity: "Quantity", unit: "Unit", area_ha: "Area (ha)",
+              notes_ca: "Notes (CA)", notes_en: "Notes (EN)" },
+  },
+};
+// Must match app/web.py WEB_EDITABLE and the status moves in app/schemas.py STATUS_TRANSITIONS
+const EDITABLE = ["date", "parcel_alias", "activity_key", "product", "target_pest_key",
+                  "quantity", "unit", "area_ha", "notes_ca", "notes_en"];
+const CAN_APPROVE = new Set(["needs_review", "auto_approved", "corrected"]);
+const CAN_CORRECT = new Set(["needs_review", "auto_approved", "validated", "corrected"]);
+const POLL_MS = 2000;
+
+const state = { lang: "ca", reviewOnly: false, records: [], corrections: [], parcels: [], vocab: [],
+                seen: null, openForm: null };
+try { state.lang = localStorage.getItem("fv-lang") || "ca"; } catch {}
+const t = () => T[state.lang];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const num = n => n == null ? "" : (Math.round(n * 100) / 100).toLocaleString(state.lang === "ca" ? "ca" : "en");
+const label = (r, base) => r[`${base}_${state.lang}`] ?? r[`${base}_en`] ?? "";
+
+function toast(msg) {
+  const el = $("toast"); el.textContent = msg; el.classList.add("on");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove("on"), 2500);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(`api/${path}`, { headers: { "Content-Type": "application/json" }, ...opts });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = body.detail;
+    throw new Error(Array.isArray(d) ? d.map(x => x.msg).join("; ") : (d || res.statusText));
+  }
+  return body;
+}
+
+// --- rendering -------------------------------------------------------------------
+
+function renderChrome() {
+  document.documentElement.lang = state.lang;
+  $("subtitle").textContent = t().subtitle;
+  $("corr-title").textContent = t().corrTitle;
+  $("head").innerHTML = t().cols.map(c => `<th>${esc(c)}</th>`).join("");
+  for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", b.dataset.lang === state.lang);
+  $("review").setAttribute("aria-pressed", state.reviewOnly);
+  renderLive();
+}
+
+function renderLive(offline = false) {
+  const el = $("live");
+  el.className = "live" + (offline ? " off" : state.openForm ? " paused" : "");
+  el.textContent = offline ? t().offline : state.openForm ? t().paused : t().live;
+  const n = state.records.filter(r => r.status === "needs_review").length;
+  $("review").innerHTML = `${esc(t().review)}<span class="count">${n}</span>`;
+}
+
+function row(r) {
+  const cls = [r.status, state.seen && !state.seen.has(r.id) ? "new" : ""].join(" ");
+  const score = r.judge_score == null ? "" :
+    `<span class="score ${r.judge_score < 0.8 ? "low" : ""}">${r.judge_score.toFixed(2)}</span>`;
+  const qty = r.quantity == null ? "" : `${num(r.quantity)} ${esc(r.unit || "")}`;
+  const dose = r.dose_per_ha == null ? "" : `${num(r.dose_per_ha)} ${esc(r.unit || "")}/ha`;
+  const pest = r.target_pest_key ? `<span class="sub">${esc(label(r, "target_pest"))}</span>` : "";
+  const acts = [
+    CAN_APPROVE.has(r.status) ? `<button class="btn small" data-act="approve">${esc(t().approve)}</button>` : "",
+    CAN_CORRECT.has(r.status) ? `<button class="btn small" data-act="correct">${esc(t().correct)}</button>` : "",
+  ].join("");
+  return `<tr class="${cls}" data-id="${r.id}">
+    <td>${esc(r.date || "")}<span class="sub">${esc(r.record_id)}</span></td>
+    <td>${esc(r.farmer_name || r.farmer_chat_id)}<span class="sub"><span class="tag">${esc(r.lang)}</span></span></td>
+    <td>${esc(r.parcel_alias || "—")}<span class="sub">${esc(r.sigpac_ref || "")}</span></td>
+    <td>${esc(r.crop_key ? label(r, "crop") : "")}${r.crop_spoken ? `<span class="sub say">“${esc(r.crop_spoken)}”</span>` : ""}</td>
+    <td class="mid">${esc(label(r, "activity"))}${pest}</td>
+    <td class="mid">${esc(r.product || "")}</td>
+    <td class="num">${qty}</td>
+    <td class="num">${dose}</td>
+    <td><span class="status s-${esc(r.status)}">${esc(t().status[r.status] || r.status)}</span>
+      ${acts ? `<div class="actions">${acts}</div>` : ""}</td>
+    <td class="wrap">${score}${r.judge_reason ? `<span class="sub">${esc(r.judge_reason)}</span>` : ""}</td>
+    <td class="wrap say">${r.transcript_original ? `“${esc(r.transcript_original)}”` : ""}</td>
+  </tr>` + (state.openForm?.id === r.id ? formRow(r) : "");
+}
+
+function renderRows() {
+  const rows = state.records.filter(r => !state.reviewOnly || r.status === "needs_review");
+  $("rows").innerHTML = rows.map(row).join("");
+  $("empty").hidden = rows.length > 0;
+  $("empty").textContent = state.reviewOnly ? t().emptyReview : t().empty;
+  if (state.openForm) restoreForm();
+  state.seen = new Set(state.records.map(r => r.id));
+}
+
+function renderCorrections() {
+  const list = state.corrections.slice(0, 10);
+  $("corrections").innerHTML = list.length ? list.map(c => `
+    <div class="corr">
+      <div class="head"><span>R${String(c.record_id).padStart(4, "0")} · ${esc(t().fields[c.field] || c.field)}</span>
+        <span>${esc(c.corrected_by)} · ${esc((c.timestamp || "").slice(0, 16).replace("T", " "))}</span></div>
+      <div class="chg"><s>${esc(c.before ?? "∅")}</s> → <b>${esc(c.after ?? "∅")}</b></div>
+      <p>${esc(c.reason)}</p>
+    </div>`).join("") : `<div class="corr empty">${esc(t().noCorr)}</div>`;
+}
+
+function render() { renderChrome(); renderRows(); renderCorrections(); }
+
+// --- correction form ---------------------------------------------------------------
+
+function valueInput(field, current) {
+  const opt = (v, l) => `<option value="${esc(v)}" ${String(v) === String(current ?? "") ? "selected" : ""}>${esc(l)}</option>`;
+  const vocab = type => state.vocab.filter(v => v.type === type)
+    .map(v => opt(v.key, `${v[state.lang] || v.en || v.key} (${v.key})`)).join("");
+  switch (field) {
+    case "date": return `<input name="value" type="date" value="${esc(current)}">`;
+    case "quantity": case "area_ha": return `<input name="value" type="number" step="any" min="0" value="${esc(current)}">`;
+    case "parcel_alias": return `<select name="value">${state.parcels.map(p => {
+      const crop = state.vocab.find(v => v.type === "crop" && v.key === p.crop_key);
+      return opt(p.alias, `${p.alias} · ${crop?.[state.lang] || p.crop_key} · ${p.area_ha} ha`);
+    }).join("")}</select>`;
+    case "activity_key": return `<select name="value">${vocab("activity")}</select>`;
+    case "target_pest_key": return `<select name="value">${opt("", "—")}${vocab("pest")}${opt("unknown", "unknown")}</select>`;
+    default: return `<input name="value" type="text" value="${esc(current)}">`;
+  }
+}
+
+function formRow(r) {
+  const f = state.openForm;
+  return `<tr class="form" data-form="${r.id}"><td colspan="11"><form class="fix">
+    <label>${esc(t().field)}<select name="field">${EDITABLE.map(k =>
+      `<option value="${k}" ${k === f.field ? "selected" : ""}>${esc(t().fields[k])}</option>`).join("")}</select></label>
+    <label>${esc(t().value)}<span data-slot="value">${valueInput(f.field, f.value)}</span></label>
+    <label>${esc(t().reason)}<input name="reason" type="text" value="${esc(f.reason)}" autocomplete="off"></label>
+    <div class="actions"><button class="btn primary" type="submit">${esc(t().save)}</button>
+      <button class="btn" type="button" data-act="cancel">${esc(t().cancel)}</button></div>
+    <div class="was">${esc(t().was)}: <b>${esc(r[f.field] ?? "∅")}</b></div>
+    ${f.error ? `<div class="err">${esc(f.error)}</div>` : ""}
+  </form></td></tr>`;
+}
+
+function restoreForm() {
+  const form = document.querySelector("tr.form form");
+  if (!form) return;
+  const focus = state.openForm.focus;
+  if (focus) form.elements[focus]?.focus();
+}
+
+function openForm(id) {
+  const r = state.records.find(x => x.id === id);
+  state.openForm = { id, field: "quantity", value: r.quantity ?? "", reason: "", error: "", focus: "value" };
+  renderRows(); renderLive();
+}
+
+function closeForm() { state.openForm = null; renderRows(); renderLive(); }
+
+$("rows").addEventListener("input", e => {
+  const f = state.openForm; if (!f || !e.target.form) return;
+  if (e.target.name === "reason") f.reason = e.target.value;
+  if (e.target.name === "value") f.value = e.target.value;
+});
+
+$("rows").addEventListener("change", e => {
+  const f = state.openForm; if (!f || e.target.name !== "field") return;
+  const r = state.records.find(x => x.id === f.id);
+  f.field = e.target.value; f.value = r[f.field] ?? ""; f.error = ""; f.focus = "value";
+  e.target.form.querySelector("[data-slot=value]").innerHTML = valueInput(f.field, f.value);
+  e.target.form.querySelector(".was b").textContent = r[f.field] ?? "∅";
+});
+
+$("rows").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = state.openForm;
+  f.value = e.target.elements.value.value;
+  f.reason = e.target.elements.reason.value.trim();
+  if (!f.reason) { f.error = t().reasonNeeded; f.focus = "reason"; return renderRows(); }
+  try {
+    await api(`records/${f.id}`, { method: "PATCH",
+      body: JSON.stringify({ field: f.field, value: f.value === "" ? null : f.value, reason: f.reason, by: "agronomist" }) });
+    toast(`R${String(f.id).padStart(4, "0")} ${t().corrected}`);
+    state.openForm = null;
+    await refresh();
+  } catch (err) { f.error = err.message; f.focus = "value"; renderRows(); }
+});
+
+$("rows").addEventListener("click", async e => {
+  const btn = e.target.closest("button[data-act]"); if (!btn) return;
+  const id = +btn.closest("tr").dataset.id || +btn.closest("tr.form")?.dataset.form;
+  if (btn.dataset.act === "cancel") return closeForm();
+  if (btn.dataset.act === "correct") return state.openForm?.id === id ? closeForm() : openForm(id);
+  if (btn.dataset.act === "approve") {
+    btn.disabled = true;
+    try { await api(`records/${id}/approve`, { method: "POST" }); toast(`R${String(id).padStart(4, "0")} ${t().approved}`); }
+    catch (err) { toast(err.message); }
+    await refresh();
+  }
+});
+
+// --- controls + polling -----------------------------------------------------------
+
+$("review").addEventListener("click", () => { state.reviewOnly = !state.reviewOnly; render(); });
+for (const b of document.querySelectorAll("[data-lang]")) b.addEventListener("click", () => {
+  state.lang = b.dataset.lang;
+  try { localStorage.setItem("fv-lang", state.lang); } catch {}
+  render();
+});
+
+async function refresh() {
+  try {
+    const [records, corrections] = await Promise.all([api("records"), api("corrections")]);
+    state.records = records; state.corrections = corrections;
+    if (!state.openForm) renderRows();   // never rebuild the table under the agronomist's typing
+    renderCorrections(); renderLive();
+  } catch { renderLive(true); }
+}
+
+(async () => {
+  renderChrome();
+  try { [state.parcels, state.vocab] = await Promise.all([api("parcels"), api("vocabulary")]); } catch {}
+  await refresh();
+  setInterval(refresh, POLL_MS);
+})();
+</script>
+</body>
+</html>
