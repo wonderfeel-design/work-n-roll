@@ -51,6 +51,8 @@ The MVP is built in 3 hours by two people. Two Python processes, on one machine 
 
 Per-person build instructions: [CLAUDE_person1.md](CLAUDE_person1.md), [CLAUDE_person2.md](CLAUDE_person2.md).
 
+Diagrams (data flow, record lifecycle, deployment): [docs/architecture.html](docs/architecture.html).
+
 ## User flow
 
 **1. Log an activity.** The farmer says *"Ahir vaig tirar coure a la parcel·la 3, quatre quilos per les dues hectàrees."*

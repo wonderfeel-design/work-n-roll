@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Field Voice Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; each wide diagram scrolls inside its own frame. Node colour = who runs the component (same legend as the v1 design page). */
+:root{
+  --bg:#f2f3ee; --panel:#fbfcf8; --ink:#1c231f; --muted:#59645d; --line:#c3cbc0; --arrow:#4a554e;
+  --ours:#3f7d3a; --ours-bg:#e4efe1;
+  --gemma:#2a64c9; --gemma-bg:#e2ebfa;
+  --el:#7646c4; --el-bg:#eee6fa;
+  --tg:#1f8fbf; --tg-bg:#dff0f8;
+  --data:#a8650f; --data-bg:#f6ead6;
+  --loop:#c2410c; --warn:#b42318;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Public Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141916; --panel:#1b221e; --ink:#e6ebe6; --muted:#9aa69e; --line:#36413a; --arrow:#a9b5ad;
+  --ours:#86c47d; --ours-bg:#1f3320; --gemma:#86acf0; --gemma-bg:#1b2a45; --el:#b896ef; --el-bg:#2b2142;
+  --tg:#6cc3e8; --tg-bg:#163445; --data:#e0a456; --data-bg:#3a2b16; --loop:#fb923c; --warn:#f97066; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141916; --panel:#1b221e; --ink:#e6ebe6; --muted:#9aa69e; --line:#36413a; --arrow:#a9b5ad;
+  --ours:#86c47d; --ours-bg:#1f3320; --gemma:#86acf0; --gemma-bg:#1b2a45; --el:#b896ef; --el-bg:#2b2142;
+  --tg:#6cc3e8; --tg-bg:#163445; --data:#e0a456; --data-bg:#3a2b16; --loop:#fb923c; --warn:#f97066; color-scheme:dark}
+
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:44px}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.05;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,5vw,52px)} h2{font-size:28px} h3{font-size:20px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+header{display:grid;gap:10px} header p,.lede{max-width:70ch;margin:0;color:var(--muted)}
+section{display:grid;gap:14px;min-width:0}
+figure{margin:0;display:grid;gap:10px;min-width:0}
+figcaption{font-size:14px;color:var(--muted);max-width:80ch}
+.frame{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.frame svg{display:block;min-width:980px;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:12px var(--mono);color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:2px;border:1.5px solid}
+.legend b{display:inline-block;width:22px;height:0;border-top:2px dashed var(--loop)}
+.legend b.warn{border-top-color:var(--warn)}
+.l-ours{background:var(--ours-bg);border-color:var(--ours)!important}.l-gemma{background:var(--gemma-bg);border-color:var(--gemma)!important}
+.l-el{background:var(--el-bg);border-color:var(--el)!important}.l-tg{background:var(--tg-bg);border-color:var(--tg)!important}
+.l-data{background:var(--data-bg);border-color:var(--data)!important}
+
+/* svg */
+.n rect{stroke-width:1.5}
+.n-ours>rect{fill:var(--ours-bg);stroke:var(--ours)} .n-gemma>rect{fill:var(--gemma-bg);stroke:var(--gemma)}
+.n-el>rect{fill:var(--el-bg);stroke:var(--el)} .n-tg>rect{fill:var(--tg-bg);stroke:var(--tg)} .n-data>rect{fill:var(--data-bg);stroke:var(--data)}
+.n-user>rect{fill:var(--panel);stroke:var(--ink)}
+.sub{fill:var(--panel);stroke-width:1}
+.n-gemma .sub{stroke:var(--gemma)} .n-el .sub{stroke:var(--el)} .n-data .sub{stroke:var(--data)}
+.sub.hot{stroke:var(--loop);stroke-width:1.5}
+.t{font:600 14px var(--body);fill:var(--ink)} .s{font:11px var(--mono);fill:var(--muted)} .si{font:italic 11px var(--body);fill:var(--muted)}
+.zone{fill:none;stroke:var(--ours);stroke-dasharray:6 5;stroke-width:1.2}
+.zone.alt{stroke:var(--muted)}
+.zl{font:500 11px var(--mono);letter-spacing:.08em;fill:var(--ours)} .zl.alt{fill:var(--muted)}
+.a{fill:none;stroke:var(--arrow);stroke-width:1.5}
+.a.loop{stroke:var(--loop);stroke-dasharray:6 4;stroke-width:1.8}
+.a.warn{stroke:var(--warn);stroke-width:1.8} .a.warn.dash{stroke-dasharray:6 4}
+.a.farmer{stroke:var(--tg);stroke-width:1.8} .a.judge{stroke:var(--gemma);stroke-width:1.8} .a.expert{stroke:var(--ours);stroke-width:1.8}
+.al{font:11px var(--mono);fill:var(--muted)} .al.loop{fill:var(--loop)} .al.warn{fill:var(--warn)}
+.al.farmer{fill:var(--tg)} .al.judge{fill:var(--gemma)} .al.expert{fill:var(--ours)}
+.st rect{fill:var(--panel);stroke:var(--ink);stroke-width:1.5}
+.st.amber rect{fill:var(--data-bg);stroke:var(--data)} .st.green rect{fill:var(--ours-bg);stroke:var(--ours)}
+.st.blue rect{fill:var(--gemma-bg);stroke:var(--gemma)} .st.grey rect{stroke:var(--muted);stroke-dasharray:4 3}
+.st text{font:500 13px var(--mono);fill:var(--ink);text-anchor:middle}
+
+/* tables + flows */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:14px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0} td:first-child{font-weight:600;white-space:nowrap}
+code{font:13px var(--mono);background:var(--bg);padding:1px 5px;border-radius:3px}
+.flows{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 18px;min-width:0;display:grid;gap:8px;align-content:start}
+.flow h3{display:flex;gap:10px;align-items:baseline}
+.flow h3 b{font:500 12px var(--mono);color:var(--ours)}
+.flow ol{margin:0;padding-left:20px;display:grid;gap:4px;font-size:14px}
+.flow .time{font:12px var(--mono);color:var(--muted)}
+.decisions{margin:0;padding-left:20px;display:grid;gap:8px;max-width:84ch}
+footer{font:12px var(--mono);color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">SA.TECH Field Voice · as built · 24 Oct 2026</div>
+  <h1>Field Voice architecture</h1>
+  <p>A farmer logs field work by Telegram voice note in English, Russian, Catalan or Spanish. The bot transcribes it, Gemma 4 turns it into a record, a rule-based judge scores it, and the farmer confirms it. An agronomist reviews and corrects records on a web console, asks questions by voice, and downloads the Excel log. Every process reads and writes one PostgreSQL database.</p>
+</header>
+
+<section>
+  <div class="eyebrow">Figure 1 · data flow</div>
+  <h2>Who talks to whom</h2>
+  <div class="legend">
+    <span><i class="l-ours"></i>our code (Python, Docker)</span>
+    <span><i class="l-gemma"></i>Google Gemini API</span>
+    <span><i class="l-el"></i>ElevenLabs</span>
+    <span><i class="l-tg"></i>Telegram</span>
+    <span><i class="l-data"></i>PostgreSQL</span>
+    <span><b></b>learning loop</span>
+  </div>
+  <figure>
+    <div class="frame">
+<svg viewBox="0 0 1200 690" role="img" aria-label="Data flow: the Telegram bot and the web console both read and write one PostgreSQL database; the bot calls ElevenLabs Scribe and Gemma 4, the console's voice assistant calls Scribe, Gemini Flash and ElevenLabs TTS, and stored corrections feed back into Gemma's extraction prompt.">
+  <defs>
+    <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker>
+    <marker id="hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--loop)"/></marker>
+  </defs>
+
+  <rect class="zone" x="345" y="24" width="555" height="642" rx="10"/>
+  <text class="zl" x="360" y="46">DOCKER COMPOSE · ONE HOST</text>
+
+  <!-- people -->
+  <g class="n n-user"><rect x="20" y="70" width="150" height="100" rx="6"/>
+    <text class="t" x="34" y="96">Farmer</text>
+    <text class="s" x="34" y="118">Telegram app</text>
+    <text class="s" x="34" y="136">EN · RU · CA · ES</text>
+    <text class="s" x="34" y="154">voice, text</text></g>
+  <g class="n n-user"><rect x="20" y="480" width="150" height="100" rx="6"/>
+    <text class="t" x="34" y="506">Agronomist</text>
+    <text class="s" x="34" y="528">browser</text>
+    <text class="s" x="34" y="546">reviews, corrects</text>
+    <text class="s" x="34" y="564">asks by voice</text></g>
+
+  <!-- telegram -->
+  <g class="n n-tg"><rect x="196" y="88" width="124" height="64" rx="6"/>
+    <text class="t" x="208" y="114">Telegram</text>
+    <text class="s" x="208" y="134">Bot API</text></g>
+  <path class="a" d="M170 120H194" marker-end="url(#h)" marker-start="url(#h)"/>
+  <path class="a" d="M320 120H368" marker-end="url(#h)" marker-start="url(#h)"/>
+  <text class="al" x="326" y="112">polls</text>
+
+  <!-- bot -->
+  <g class="n n-ours"><rect x="370" y="60" width="240" height="150" rx="6"/>
+    <text class="t" x="386" y="86">Telegram bot</text>
+    <text class="s" x="386" y="106">app/bot.py · aiogram 3</text>
+    <text class="s" x="386" y="126">1 transcribe  2 extract</text>
+    <text class="s" x="386" y="144">3 judge (validator.py)</text>
+    <text class="s" x="386" y="162">4 card ✅ ✏️ ❌, then save</text>
+    <text class="si" x="386" y="192">exactly one copy runs</text></g>
+
+  <!-- seed -->
+  <g class="n n-ours"><rect x="370" y="262" width="240" height="76" rx="6"/>
+    <text class="t" x="386" y="288">seed (runs once)</text>
+    <text class="s" x="386" y="308">app/seed.py</text>
+    <text class="s" x="386" y="326">sample .xlsx → reference</text></g>
+  <path class="a" d="M610 300H658" marker-end="url(#h)"/>
+  <text class="al" x="616" y="292">upsert</text>
+
+  <!-- web -->
+  <g class="n n-ours"><rect x="370" y="470" width="240" height="176" rx="6"/>
+    <text class="t" x="386" y="496">Web console + API</text>
+    <text class="s" x="386" y="516">app/web.py · FastAPI :8000</text>
+    <text class="s" x="386" y="536">table polls every 2 s</text>
+    <text class="s" x="386" y="556">correct · approve</text>
+    <text class="s" x="386" y="576">export.py → .xlsx</text>
+    <text class="s" x="386" y="596">assistant.py → voice Q&amp;A</text>
+    <text class="si" x="386" y="626">127.0.0.1 only · login</text></g>
+  <path class="a" d="M170 530H368" marker-end="url(#h)" marker-start="url(#h)"/>
+  <text class="al" x="190" y="522">console · mic audio</text>
+
+  <!-- postgres -->
+  <g class="n n-data"><rect x="660" y="250" width="220" height="200" rx="6"/>
+    <text class="t" x="676" y="276">PostgreSQL 16</text>
+    <text class="s" x="676" y="296">port 5432 · on Wi-Fi</text>
+    <rect class="sub" x="676" y="310" width="188" height="24" rx="3"/><text class="s" x="686" y="326">parcels · vocabulary</text>
+    <rect class="sub" x="676" y="338" width="188" height="24" rx="3"/><text class="s" x="686" y="354">ui_strings · farmers</text>
+    <rect class="sub" x="676" y="366" width="188" height="24" rx="3"/><text class="s" x="686" y="382">field_log (records)</text>
+    <rect class="sub hot" x="676" y="394" width="188" height="24" rx="3"/><text class="s" x="686" y="410">corrections, append-only</text></g>
+
+  <!-- bot <-> postgres, and the learning loop back -->
+  <path class="a" d="M610 190H740V248" marker-end="url(#h)"/>
+  <text class="al" x="616" y="206">save · status</text>
+  <path class="a loop" d="M820 248V156H612" marker-end="url(#hl)"/>
+  <text class="al loop" x="616" y="148">last 5 corrections → prompt</text>
+
+  <!-- web <-> postgres -->
+  <path class="a" d="M610 482H740V452" marker-end="url(#h)" marker-start="url(#h)"/>
+  <text class="al" x="616" y="474">read · write</text>
+
+  <!-- externals -->
+  <g class="n n-gemma"><rect x="950" y="40" width="230" height="170" rx="6"/>
+    <text class="t" x="966" y="66">Gemini API</text>
+    <rect class="sub" x="966" y="78" width="198" height="34" rx="4"/><text class="s" x="976" y="99">Gemma 4 26B · extract</text>
+    <rect class="sub" x="966" y="120" width="198" height="34" rx="4"/><text class="s" x="976" y="141">Gemma 4 31B · fallback</text>
+    <rect class="sub" x="966" y="162" width="198" height="34" rx="4"/><text class="s" x="976" y="183">Gemini 3.5 Flash · Q&amp;A</text></g>
+  <g class="n n-el"><rect x="950" y="410" width="230" height="160" rx="6"/>
+    <text class="t" x="966" y="436">ElevenLabs</text>
+    <rect class="sub" x="966" y="448" width="198" height="34" rx="4"/><text class="s" x="976" y="469">Scribe v2 · speech → text</text>
+    <rect class="sub" x="966" y="490" width="198" height="34" rx="4"/><text class="s" x="976" y="511">TTS v4 turbo · 25 voices</text>
+    <text class="si" x="966" y="552">OGG/Opus made with ffmpeg</text></g>
+
+  <!-- bot -> externals -->
+  <path class="a" d="M610 92H948" marker-end="url(#h)"/>
+  <text class="al" x="616" y="84">note text → record JSON</text>
+  <path class="a" d="M610 122H918V440H948" marker-end="url(#h)"/>
+  <text class="al" x="616" y="116">transcribe · speak reply</text>
+
+  <!-- web -> externals -->
+  <path class="a" d="M610 516H934V190H948" marker-end="url(#h)"/>
+  <text class="al" x="616" y="508">question + totals → answer</text>
+  <path class="a" d="M610 552H948" marker-end="url(#h)"/>
+  <text class="al" x="616" y="544">assistant: Scribe · TTS</text>
+</svg>
+    </div>
+    <figcaption>Both processes reach the outside world directly: the bot calls Scribe and Gemma for every voice note, and the console's voice assistant calls Scribe, Gemini Flash and TTS. They share nothing but the database. The dashed line is what makes the judge learn: each correction becomes an example in Gemma's next extraction prompt.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="eyebrow">Figure 2 · record lifecycle</div>
+  <h2>What state a record moves through</h2>
+  <div class="legend">
+    <span><b style="border-top:2px solid var(--tg)"></b>farmer, in Telegram</span>
+    <span><b style="border-top:2px solid var(--gemma)"></b>judge (validator.py)</span>
+    <span><b style="border-top:2px solid var(--ours)"></b>agronomist, in the console</span>
+  </div>
+  <figure>
+    <div class="frame">
+<svg viewBox="0 0 1200 340" role="img" aria-label="Status flow: a draft becomes farmer_confirmed when the farmer taps confirm; the judge sends it to auto_approved at score 0.80 or above, otherwise to needs_review; the agronomist approves to validated or corrects with a reason to corrected; a draft can be discarded, which is final.">
+  <defs>
+    <marker id="hf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--tg)"/></marker>
+    <marker id="hj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--gemma)"/></marker>
+    <marker id="he" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--ours)"/></marker>
+  </defs>
+  <g class="st"><rect x="30" y="140" width="170" height="48" rx="24"/><text x="115" y="169">draft</text></g>
+  <g class="st"><rect x="300" y="140" width="170" height="48" rx="24"/><text x="385" y="169">farmer_confirmed</text></g>
+  <g class="st green"><rect x="620" y="60" width="170" height="48" rx="24"/><text x="705" y="89">auto_approved</text></g>
+  <g class="st amber"><rect x="620" y="220" width="170" height="48" rx="24"/><text x="705" y="249">needs_review</text></g>
+  <g class="st green"><rect x="900" y="60" width="170" height="48" rx="24"/><text x="985" y="89">validated</text></g>
+  <g class="st blue"><rect x="900" y="220" width="170" height="48" rx="24"/><text x="985" y="249">corrected</text></g>
+  <g class="st grey"><rect x="30" y="270" width="170" height="48" rx="24"/><text x="115" y="299">discarded</text></g>
+
+  <path class="a farmer" d="M200 164H298" marker-end="url(#hf)"/>
+  <text class="al farmer" x="212" y="154">taps ✅</text>
+  <path class="a farmer" d="M115 188V268" marker-end="url(#hf)"/>
+  <text class="al farmer" x="124" y="234">taps ❌</text>
+
+  <path class="a judge" d="M470 164H515V84H618" marker-end="url(#hj)"/>
+  <path class="a judge" d="M515 164V244H618" marker-end="url(#hj)"/>
+  <text class="al judge" x="524" y="76">score ≥ 0.80</text>
+  <text class="al judge" x="524" y="236">score &lt; 0.80</text>
+
+  <path class="a expert" d="M790 84H898" marker-end="url(#he)"/>
+  <text class="al expert" x="802" y="76">approve</text>
+  <path class="a expert" d="M790 232H845V100H898" marker-end="url(#he)"/>
+  <text class="al expert" x="852" y="140">approve</text>
+  <path class="a expert" d="M790 256H898" marker-end="url(#he)"/>
+  <text class="al expert" x="804" y="276">correct</text>
+  <path class="a expert" d="M965 108V218" marker-end="url(#he)"/>
+  <text class="al expert" x="910" y="196">correct</text>
+  <path class="a expert" d="M1035 218V110" marker-end="url(#he)"/>
+  <text class="al expert" x="1044" y="168">approve</text>
+</svg>
+    </div>
+    <figcaption>The database refuses any other move (<code>STATUS_TRANSITIONS</code>). <code>corrected</code> is reachable only after an agronomist correction with a reason has been written; an auto-approved record can be corrected too. Discarded is final, and records are never deleted.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="eyebrow">Figure 3 · deployment</div>
+  <h2>Where each process runs</h2>
+  <div class="legend">
+    <span><i class="l-ours"></i>container</span>
+    <span><i class="l-data"></i>database and volumes</span>
+    <span><b class="warn" style="border-top-style:solid"></b>Telegram polling, one copy only</span>
+  </div>
+  <figure>
+    <div class="frame">
+<svg viewBox="0 0 1200 400" role="img" aria-label="Deployment: Person 2's Mac runs web, bot, seed and PostgreSQL in Docker; PostgreSQL is published on port 5432 so a bot on Person 1's laptop can use the same database over Wi-Fi; only one bot copy, either the container or the laptop, may poll Telegram.">
+  <defs>
+    <marker id="hd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker>
+    <marker id="hw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--warn)"/></marker>
+  </defs>
+  <rect class="zone" x="20" y="24" width="700" height="356" rx="10"/>
+  <text class="zl" x="36" y="46">PERSON 2'S MAC · DOCKER DESKTOP · 172.21.30.74</text>
+
+  <g class="n n-ours"><rect x="40" y="66" width="220" height="86" rx="6"/>
+    <text class="t" x="56" y="92">web</text>
+    <text class="s" x="56" y="112">uvicorn app.web:app</text>
+    <text class="s" x="56" y="130">127.0.0.1:8000 → browser</text></g>
+  <g class="n n-ours"><rect x="40" y="186" width="220" height="86" rx="6"/>
+    <text class="t" x="56" y="212">bot</text>
+    <text class="s" x="56" y="232">python -m app.bot</text>
+    <text class="s" x="56" y="250">no port, polls out</text></g>
+  <g class="n n-ours"><rect x="40" y="296" width="220" height="64" rx="6"/>
+    <text class="t" x="56" y="322">seed</text>
+    <text class="s" x="56" y="342">runs once, then exits</text></g>
+
+  <g class="n n-data"><rect x="500" y="66" width="200" height="86" rx="6"/>
+    <text class="t" x="516" y="92">postgres</text>
+    <text class="s" x="516" y="112">postgres:16</text>
+    <text class="s" x="516" y="130">0.0.0.0:5432 · password</text></g>
+  <g class="n n-data"><rect x="500" y="176" width="200" height="56" rx="6"/>
+    <text class="t" x="516" y="200">fieldvoice-pg</text>
+    <text class="s" x="516" y="219">volume · all records</text></g>
+  <g class="n n-data"><rect x="500" y="296" width="200" height="64" rx="6"/>
+    <text class="t" x="516" y="322">fieldvoice-data</text>
+    <text class="s" x="516" y="342">audio · TTS cache · exports</text></g>
+
+  <path class="a" d="M260 96H498" marker-end="url(#hd)"/>
+  <text class="al" x="272" y="88">SQL · postgres:5432</text>
+  <path class="a" d="M260 212H400V120H498" marker-end="url(#hd)"/>
+  <text class="al" x="272" y="204">SQL</text>
+  <path class="a" d="M260 328H420V140H498" marker-end="url(#hd)"/>
+  <text class="al" x="272" y="320">reference data</text>
+  <path class="a" d="M600 152V174" marker-end="url(#hd)"/>
+
+  <!-- Person 1 -->
+  <rect class="zone alt" x="800" y="24" width="380" height="150" rx="10"/>
+  <text class="zl alt" x="816" y="46">PERSON 1'S LAPTOP · SAME WI-FI</text>
+  <g class="n n-ours"><rect x="820" y="62" width="340" height="90" rx="6"/>
+    <text class="t" x="836" y="88">bot, while developing</text>
+    <text class="s" x="836" y="108">python -m app.bot</text>
+    <text class="s" x="836" y="126">DATABASE_URL → 172.21.30.74:5432</text></g>
+  <path class="a" d="M820 110H702" marker-end="url(#hd)"/>
+  <text class="al" x="728" y="102">Wi-Fi</text><text class="al" x="728" y="128">port 5432</text>
+
+  <!-- Telegram -->
+  <g class="n n-tg"><rect x="820" y="250" width="340" height="80" rx="6"/>
+    <text class="t" x="836" y="276">Telegram Bot API</text>
+    <text class="s" x="836" y="296">@wnroll_bot · long polling</text>
+    <text class="s" x="836" y="314">rejects a second poller</text></g>
+  <path class="a warn" d="M260 262H818" marker-end="url(#hw)"/>
+  <text class="al warn" x="440" y="256">polls · either here</text>
+  <path class="a warn dash" d="M990 152V248" marker-end="url(#hw)"/>
+  <text class="al warn" x="998" y="206">or here, never both</text>
+</svg>
+    </div>
+    <figcaption>The database is the only thing both laptops share. The bot runs in exactly one place: in the Mac's Docker for the demo, or on Person 1's laptop while they change its code. Two copies polling the same token makes Telegram return <code>Conflict</code> and split voice notes between them.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="eyebrow">How a request moves</div>
+  <h2>Four flows</h2>
+  <div class="flows">
+    <div class="flow"><h3><b>A</b>Log an activity</h3><ol>
+      <li>Voice note to the bot; Scribe returns text and language.</li>
+      <li>Gemma 4 maps spoken names to parcels and returns one record per activity, with dates resolved in Europe/Madrid.</li>
+      <li>Missing parcel or quantity: the bot asks once more.</li>
+      <li>The judge scores dose, crop and date; the card comes back in the farmer's language, as text and voice.</li>
+      <li>✅ saves it; the console shows it within 2 s.</li></ol>
+      <div class="time">Scribe ~1 s · Gemma extraction varies</div></div>
+    <div class="flow"><h3><b>B</b>Expert correction</h3><ol>
+      <li>The agronomist opens <em>Needs review</em> and picks Correct.</li>
+      <li>One field, a new value and a required reason.</li>
+      <li>The value and a <code>corrections</code> row are written in one transaction; status becomes corrected.</li>
+      <li>The next extraction prompt includes the correction as an example.</li></ol></div>
+    <div class="flow"><h3><b>C</b>Excel report</h3><ol>
+      <li>Download report in the console, or the bot's <code>/report</code>.</li>
+      <li>The sample workbook is the template: same tabs, colours and dropdowns.</li>
+      <li>Lookups and dose per hectare stay live formulas.</li></ol></div>
+    <div class="flow"><h3><b>D</b>Ask by voice</h3><ol>
+      <li>Tap the orb and ask; a pause ends the question.</li>
+      <li>Scribe transcribes; the server computes totals and averages in Python.</li>
+      <li>Gemini Flash phrases the answer; TTS speaks it in the chosen voice with subtitles.</li>
+      <li>It listens again for a follow-up.</li></ol>
+      <div class="time">~3 s from question to answer</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Reference</div>
+  <h2>Components</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Component</th><th>Code</th><th>Owner</th><th>Talks to</th></tr></thead>
+    <tbody>
+      <tr><td>Telegram bot</td><td><code>app/bot.py</code></td><td>Person 1</td><td>Telegram, voice, extractor, judge, database</td></tr>
+      <tr><td>Extractor</td><td><code>app/gemma.py</code>, <code>app/prompts/</code></td><td>Person 1</td><td>Gemma 4 26B, 31B as fallback; reads parcels, vocabulary, last corrections</td></tr>
+      <tr><td>Judge</td><td><code>app/validator.py</code></td><td>Person 1</td><td>Rules only: dose range, crop vs parcel, future date, unknown keys, missing fields</td></tr>
+      <tr><td>Voice in and out</td><td><code>app/voice.py</code></td><td>Person 2</td><td>Scribe v2 with farm keyterms; TTS v4 turbo; ffmpeg to OGG/Opus; cached</td></tr>
+      <tr><td>Console and API</td><td><code>app/web.py</code>, <code>web/index.html</code></td><td>Person 2</td><td>Database; login on every route except health</td></tr>
+      <tr><td>Excel report</td><td><code>app/export.py</code></td><td>Person 2</td><td>Database; the sample workbook as template</td></tr>
+      <tr><td>Voice assistant</td><td><code>app/assistant.py</code></td><td>Person 2</td><td>Gemini 3.5 Flash, Gemma as fallback; read-only over the database</td></tr>
+      <tr><td>Shared contract</td><td><code>app/schemas.py</code>, <code>app/db.py</code>, <code>app/seed.py</code></td><td>Both</td><td>PostgreSQL through <code>DATABASE_URL</code>; changed only by agreement</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="eyebrow">Why it looks like this</div>
+  <h2>Decisions behind the diagrams</h2>
+  <ul class="decisions">
+    <li><strong>One transcript, then a read-back.</strong> Gemma 4 on the Gemini API has no audio input, so Scribe hears the note and the farmer confirms every record.</li>
+    <li><strong>PostgreSQL instead of SQLite.</strong> A file database only worked while bot and console ran on one machine; Person 1's records never reached the console.</li>
+    <li><strong>Strict corrections.</strong> Corrections train the judge, so the database enforces them: foreign key to the record, required reason, append-only, no deleted records.</li>
+    <li><strong>Gemini Flash for spoken answers.</strong> Gemma 4 thinks 12–18 s before every answer on this API, which is too slow for a conversation; it still does all extraction.</li>
+    <li><strong>Numbers from Python, words from the model.</strong> The assistant gets precomputed totals, so arithmetic is exact and the model can't change data.</li>
+    <li><strong>Polling, not live push.</strong> The console asks every 2 s; it looks the same in a demo and needs no extra server pieces.</li>
+  </ul>
+</section>
+
+<footer>Source: github.com/wonderfeel-design/work-n-roll · README.md lists every decision · v1 design page: "Field Voice: farm log from voice, text and photos"</footer>
+</div>
+</body>
+</html>
