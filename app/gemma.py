@@ -3,7 +3,6 @@ import datetime as dt
 import json
 import logging
 import os
-import re
 import time
 from typing import TypeVar
 
@@ -100,9 +99,16 @@ def _log(entry: dict) -> None:
 
 
 def _parse(text: str, schema: type[M]) -> M:
-    """Accept bare JSON or JSON wrapped in a ```json fence (Gemma without JSON mode)."""
-    m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
-    return schema.model_validate_json(m.group(1) if m else text.strip())
+    """The first JSON object in the reply, ignoring fences or text around it (Gemma sometimes adds
+    a stray ``` even in JSON mode). Raises ValidationError if there is no valid object."""
+    start = text.find("{")
+    if start >= 0:
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text, start)
+            return schema.model_validate(obj)
+        except json.JSONDecodeError:
+            pass
+    return schema.model_validate_json(text.strip())
 
 
 def _generate(model: str, prompt: str, schema: type[M], structured: bool) -> str:

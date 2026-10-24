@@ -163,6 +163,17 @@ def test_empty_date_is_resolved_from_spoken_words(monkeypatch):
     assert r.date == _today().isoformat() and "date" not in r.missing_fields
 
 
+@pytest.mark.parametrize("raw", [
+    "{json}\n```",                       # stray fence after JSON (seen live)
+    "```json\n{json}\n```",
+    "Here you go:\n{json}\nDone.",
+])
+def test_parse_tolerates_text_around_json(raw):
+    from app.schemas import ExtractionResult
+    r = gemma._parse(raw.replace("{json}", _answer()), ExtractionResult)
+    assert r.records[0].parcel_alias == "P3"
+
+
 def test_all_attempts_fail(monkeypatch):
     monkeypatch.setattr(gemma, "_generate", lambda *a: "nope")
     with pytest.raises(gemma.GemmaError):

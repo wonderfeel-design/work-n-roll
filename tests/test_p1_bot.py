@@ -20,6 +20,7 @@ TODAY = dt.datetime.now(db.TZ).date().isoformat()
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(b, "speak", lambda text, lang: None)
+    monkeypatch.setattr(b, "VOICE_REPLIES", True)
     monkeypatch.delenv("AGRONOMIST_CHAT_ID", raising=False)
     db.init_db()
     seed.seed()
@@ -236,3 +237,38 @@ def test_failed_transcription_answers_not_understood(env, monkeypatch, tmp_path)
     run(b.on_note(msg, bot, state))
     assert bot.sent[-1][1] == db.ui("not_understood", "en")
     assert db.list_records() == []
+
+
+def test_note_sent_instead_of_name_is_handled_as_note(env, monkeypatch):
+    bot, state = env
+    monkeypatch.setattr(gemma, "extract", lambda *a: ExtractionResult(
+        records=[_ext(activity_key="irrigation", parcel_alias="P2", product=None, quantity=120, unit="m3")],
+        is_farm_activity=True))
+    run(b.on_start(FakeMessage(bot, "/start"), state))
+    assert run(state.get_state()) == b.Onboarding.name.state
+    run(b.on_name(FakeMessage(bot, "Watered the Gala block today, about 120 cubic metres."), bot, state))
+    assert (db.get_farmer(CHAT) or {}).get("name") is None
+    assert len(db.list_records()) == 1 and "New record" in bot.sent[-1][1]
+
+
+def test_real_name_is_stored(env):
+    bot, state = env
+    run(b.on_start(FakeMessage(bot, "/start"), state))
+    run(b.on_name(FakeMessage(bot, "Joan Puig"), bot, state))
+    assert db.get_farmer(CHAT)["name"] == "Joan Puig" and run(state.get_state()) is None
+
+
+def test_no_tts_call_without_ffmpeg(env, monkeypatch):
+    bot, state = env
+    calls = []
+    monkeypatch.setattr(b, "speak", lambda text, lang: calls.append(text) or "x.ogg")
+    monkeypatch.setattr(b, "VOICE_REPLIES", False)
+    run(b.say(bot, CHAT, "Saved.", "en"))
+    assert calls == [] and [t for _, t, _ in bot.sent] == ["Saved."]
+
+
+def test_voice_sent_when_available(env, monkeypatch):
+    bot, state = env
+    monkeypatch.setattr(b, "speak", lambda text, lang: "x.ogg")
+    run(b.say(bot, CHAT, "Saved.", "en"))
+    assert [t for _, t, _ in bot.sent] == ["Saved.", "<voice>"]
