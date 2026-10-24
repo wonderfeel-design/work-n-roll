@@ -7,3 +7,4 @@ pytest
 fastapi
 uvicorn[standard]
 elevenlabs
+python-multipart

@@ -33,6 +33,10 @@ DEFAULT_LANG = "en"
 # Scribe returns ISO 639-3 codes (eng, spa, cat, rus); accept ISO 639-1 as well
 _LANG_CODES = {"eng": "en", "rus": "ru", "cat": "ca", "spa": "es"} | {c: c for c in LANGS}
 
+# Telegram sends .oga; browsers record .webm (Chrome, Firefox) or .mp4 (Safari)
+_AUDIO_TYPES = {".oga": "audio/ogg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".webm": "audio/webm",
+                ".mp4": "audio/mp4", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav"}
+
 # Keyterms: each < 50 chars, <= 5 words, none of these characters; > 100 terms bills at least 20 s
 _KEYTERM_LIMIT = 100
 _KEYTERM_BAD_CHARS = set("<>{}[]\\")
@@ -97,11 +101,12 @@ def transcribe(audio_path: str) -> dict:
         raise VoiceError(f"audio file not found: {path}")
     model = os.getenv("ELEVENLABS_STT_MODEL") or "scribe_v2"
     terms = keyterms()
+    mime = _AUDIO_TYPES.get(path.suffix.lower(), "application/octet-stream")
     started = time.monotonic()
     try:
         with path.open("rb") as f:
             r = _client().speech_to_text.convert(
-                model_id=model, file=(path.name, f, "audio/ogg"), tag_audio_events=False,
+                model_id=model, file=(path.name, f, mime), tag_audio_events=False,
                 keyterms=terms or None,
             )
     except Exception as e:
@@ -117,23 +122,23 @@ def transcribe(audio_path: str) -> dict:
     return {"text": text, "lang": lang}
 
 
-def _tts_settings(lang: str) -> tuple[str, str, str]:
+def _tts_settings(lang: str, voice_id: str | None = None) -> tuple[str, str, str]:
     """(model, voice, language_code). v4 models are the ones with Catalan; multilingual_v2 has none."""
     lang = lang if lang in LANGS else DEFAULT_LANG
     model = os.getenv("ELEVENLABS_TTS_MODEL") or "eleven_v4_turbo"
-    voice = os.getenv("ELEVENLABS_VOICE_ID") or "JBFqnCBsd6RMkjVDRZzb"
+    voice = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "JBFqnCBsd6RMkjVDRZzb"
     return model, voice, lang
 
 
-def tts_mp3(text: str, lang: str) -> Path | None:
+def tts_mp3(text: str, lang: str, voice_id: str | None = None) -> Path | None:
     """Text to MP3 in data/tts, cached by (model, voice, lang, text). None on failure.
 
-    The MP3 is what browsers play (web Listen button); speak() turns it into OGG/Opus for Telegram.
+    The MP3 is what browsers play (web assistant); speak() turns it into OGG/Opus for Telegram.
     """
     text = (text or "").strip()
     if not text:
         return None
-    model, voice, lang = _tts_settings(lang)
+    model, voice, lang = _tts_settings(lang, voice_id)
     key = hashlib.sha256(json.dumps([model, voice, lang, text], ensure_ascii=False).encode()).hexdigest()[:24]
     mp3 = TTS_DIR / f"{key}.mp3"
     if mp3.exists():
@@ -152,6 +157,21 @@ def tts_mp3(text: str, lang: str) -> Path | None:
         return None
     _log_call("text_to_speech", True, started, model=model, lang=lang, chars=len(text), bytes=len(audio))
     return mp3
+
+
+@lru_cache(maxsize=1)
+def list_voices() -> tuple[dict, ...]:
+    """Voices on the account for the web picker: your own (cloned) first, then ElevenLabs' premade."""
+    r = _client().voices.search(page_size=100)
+    voices = [{"voice_id": v.voice_id, "name": v.name.split(" - ")[0], "description": v.name.partition(" - ")[2],
+               "category": v.category, "gender": (v.labels or {}).get("gender"),
+               "accent": (v.labels or {}).get("accent")} for v in r.voices]
+    order = {"cloned": 0, "generated": 1, "professional": 1, "premade": 2}
+    return tuple(sorted(voices, key=lambda v: (order.get(v["category"], 1), v["name"])))
+
+
+def default_voice_id() -> str:
+    return _tts_settings(DEFAULT_LANG)[1]
 
 
 def speak(text: str, lang: str) -> str | None:
