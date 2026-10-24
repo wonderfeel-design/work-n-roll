@@ -181,7 +181,7 @@ def ask(audio: Optional[UploadFile] = File(None), text: str = Form(""), lang: st
     try:
         reply = assistant.answer(question, lang, turns)
     except assistant.AssistantError as e:
-        raise HTTPException(502, f"Gemma failed: {e}")
+        raise HTTPException(502, f"No answer model responded: {e}")
     timings["llm_ms"] = round((time.monotonic() - t) * 1000)
 
     t = time.monotonic()

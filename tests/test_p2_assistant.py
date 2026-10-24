@@ -122,3 +122,51 @@ def test_live_answers(lang, question, expected):
         assert expected in text, text
     else:
         assert "99" not in text, text
+
+
+# --- model chain and daily quotas -------------------------------------------------
+
+QUOTA_429 = ("429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'details': [{'quotaId': "
+             "'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}, {'retryDelay': '55427s'}]}}")
+
+
+def _fake_client(monkeypatch, behaviour):
+    """behaviour: model -> text to answer, or an Exception to raise. Returns the list of models called."""
+    calls = []
+
+    class Models:
+        @staticmethod
+        def generate_content(model, contents, config):
+            calls.append(model)
+            out = behaviour[model]
+            if isinstance(out, Exception):
+                raise out
+            return type("R", (), {"text": out})()
+
+    monkeypatch.setattr(assistant, "_get_client", lambda: type("C", (), {"models": Models}))
+    monkeypatch.setattr(assistant, "_exhausted", {})
+    monkeypatch.setattr(assistant, "MODELS", ("flash", "lite", "gemma-x"))
+    return calls
+
+
+def test_quota_exhausted_model_is_skipped_until_reset(monkeypatch):
+    calls = _fake_client(monkeypatch, {"flash": RuntimeError(QUOTA_429), "lite": "24 kilos.", "gemma-x": "x"})
+    assert assistant.answer("q", "en") == "24 kilos."
+    assert assistant.answer("q", "en") == "24 kilos."
+    assert calls == ["flash", "lite", "lite"]                       # flash not retried after its 429
+    assert assistant._exhausted["flash"] > assistant.time.time() + 15 * 3600
+
+
+def test_other_errors_fall_through_without_skipping(monkeypatch):
+    calls = _fake_client(monkeypatch, {"flash": RuntimeError("503 UNAVAILABLE"), "lite": "ok", "gemma-x": "x"})
+    assistant.answer("q", "en")
+    assistant.answer("q", "en")
+    assert calls == ["flash", "lite", "flash", "lite"] and assistant._exhausted == {}
+
+
+def test_all_models_exhausted(monkeypatch):
+    _fake_client(monkeypatch, {m: RuntimeError(QUOTA_429) for m in ("flash", "lite", "gemma-x")})
+    with pytest.raises(assistant.AssistantError, match="daily quota used up"):
+        assistant.answer("q", "en")
+    with pytest.raises(assistant.AssistantError, match="enable billing"):
+        assistant.answer("q", "en")
