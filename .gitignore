@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Generated at runtime; data/satech_dun_field_log_sample.xlsx and data/test_notes/ are tracked
+data/*.db
+data/*.db-*
+data/audio/
+data/tts/
+data/logs/
+data/exports/
