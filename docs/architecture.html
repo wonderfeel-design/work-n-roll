@@ -94,7 +94,7 @@ footer{font:12px var(--mono);color:var(--muted)}
 
 <div class="wrap">
 <header>
-  <div class="eyebrow">SA.TECH Field Voice · as built · 24 Oct 2026</div>
+  <div class="eyebrow">SA.TECH Field Voice · as built · 24 Oct 2026, 17:30</div>
   <h1>Field Voice architecture</h1>
   <p>A farmer logs field work by Telegram voice note in English, Russian, Catalan or Spanish. The bot transcribes it, Gemma 4 turns it into a record, a rule-based judge scores it, and the farmer confirms it. An agronomist reviews and corrects records on a web console, asks questions by voice, and downloads the Excel log. Every process reads and writes one PostgreSQL database.</p>
 </header>
@@ -145,10 +145,11 @@ footer{font:12px var(--mono);color:var(--muted)}
   <g class="n n-ours"><rect x="370" y="60" width="240" height="150" rx="6"/>
     <text class="t" x="386" y="86">Telegram bot</text>
     <text class="s" x="386" y="106">app/bot.py · aiogram 3</text>
-    <text class="s" x="386" y="126">1 transcribe  2 extract</text>
-    <text class="s" x="386" y="144">3 judge (validator.py)</text>
-    <text class="s" x="386" y="162">4 card ✅ ✏️ ❌, then save</text>
-    <text class="si" x="386" y="192">exactly one copy runs</text></g>
+    <text class="s" x="386" y="124">1 transcribe  2 extract</text>
+    <text class="s" x="386" y="140">3 ask ≤2 follow-ups</text>
+    <text class="s" x="386" y="156">4 card ✅ ✏️ ❌  5 judge</text>
+    <text class="s" x="386" y="172">every 10 s: expert edits</text>
+    <text class="si" x="386" y="198">exactly one copy runs</text></g>
 
   <!-- seed -->
   <g class="n n-ours"><rect x="370" y="262" width="240" height="76" rx="6"/>
@@ -180,8 +181,14 @@ footer{font:12px var(--mono);color:var(--muted)}
     <rect class="sub hot" x="676" y="394" width="188" height="24" rx="3"/><text class="s" x="686" y="410">corrections, append-only</text></g>
 
   <!-- bot <-> postgres, and the learning loop back -->
-  <path class="a" d="M610 190H740V248" marker-end="url(#h)"/>
+  <path class="a" d="M610 190H740V248" marker-end="url(#h)" marker-start="url(#h)"/>
   <text class="al" x="616" y="206">save · status</text>
+  <text class="al" x="616" y="222">expert edits ↩</text>
+
+  <!-- optional agronomist alert in Telegram -->
+  <path class="a" style="stroke-dasharray:3 4" d="M230 152V462H150V478" marker-end="url(#h)"/>
+  <text class="al" x="238" y="300">review alert</text>
+  <text class="al" x="238" y="316">(optional)</text>
   <path class="a loop" d="M820 248V156H612" marker-end="url(#hl)"/>
   <text class="al loop" x="616" y="148">last 5 corrections → prompt</text>
 
@@ -192,8 +199,8 @@ footer{font:12px var(--mono);color:var(--muted)}
   <!-- externals -->
   <g class="n n-gemma"><rect x="950" y="40" width="230" height="170" rx="6"/>
     <text class="t" x="966" y="66">Gemini API</text>
-    <rect class="sub" x="966" y="78" width="198" height="34" rx="4"/><text class="s" x="976" y="99">Gemma 4 26B · extract</text>
-    <rect class="sub" x="966" y="120" width="198" height="34" rx="4"/><text class="s" x="976" y="141">Gemma 4 31B · fallback</text>
+    <rect class="sub" x="966" y="78" width="198" height="34" rx="4"/><text class="s" x="976" y="99">Gemma 4 26B · extract ×2</text>
+    <rect class="sub" x="966" y="120" width="198" height="34" rx="4"/><text class="s" x="976" y="141">Gemma 4 31B · 3rd try</text>
     <rect class="sub" x="966" y="162" width="198" height="34" rx="4"/><text class="s" x="976" y="183">Gemini 3.5 Flash · Q&amp;A</text></g>
   <g class="n n-el"><rect x="950" y="410" width="230" height="160" rx="6"/>
     <text class="t" x="966" y="436">ElevenLabs</text>
@@ -214,7 +221,7 @@ footer{font:12px var(--mono);color:var(--muted)}
   <text class="al" x="616" y="544">assistant: Scribe · TTS</text>
 </svg>
     </div>
-    <figcaption>Both processes reach the outside world directly: the bot calls Scribe and Gemma for every voice note, and the console's voice assistant calls Scribe, Gemini Flash and TTS. They share nothing but the database. The dashed line is what makes the judge learn: each correction becomes an example in Gemma's next extraction prompt.</figcaption>
+    <figcaption>Both processes reach the outside world directly: the bot calls Scribe and Gemma for every voice note (Gemma 26B twice, then 31B, 30 s each), and the console's voice assistant calls Scribe, Gemini Flash and TTS. They share nothing but the database: the bot learns about the agronomist's edits by checking it every 10 s and tells the farmer in Telegram. The orange dashed line is what makes the judge learn: each correction becomes an example in Gemma's next extraction prompt. The dotted alert to the agronomist's Telegram is off until <code>AGRONOMIST_CHAT_ID</code> is set.</figcaption>
   </figure>
 </section>
 
@@ -228,13 +235,18 @@ footer{font:12px var(--mono);color:var(--muted)}
   </div>
   <figure>
     <div class="frame">
-<svg viewBox="0 0 1200 340" role="img" aria-label="Status flow: a draft becomes farmer_confirmed when the farmer taps confirm; the judge sends it to auto_approved at score 0.80 or above, otherwise to needs_review; the agronomist approves to validated or corrects with a reason to corrected; a draft can be discarded, which is final.">
+<svg viewBox="0 0 1200 340" role="img" aria-label="Status flow: a note missing details is not saved until the farmer answers up to two follow-up questions; it is then stored as a draft, which the farmer can fix by voice; a draft becomes farmer_confirmed when the farmer taps confirm; the judge sends it to auto_approved at score 0.80 or above, otherwise to needs_review; the agronomist approves to validated or corrects with a reason to corrected; a draft can be discarded, which is final.">
   <defs>
     <marker id="hf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--tg)"/></marker>
     <marker id="hj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--gemma)"/></marker>
     <marker id="he" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--ours)"/></marker>
   </defs>
+  <g class="st grey"><rect x="30" y="30" width="170" height="48" rx="24"/><text x="115" y="59">asking · not saved</text></g>
+  <path class="a farmer" d="M115 78V138" marker-end="url(#hf)"/>
+  <text class="al farmer" x="124" y="106">answers (≤ 2 questions)</text>
   <g class="st"><rect x="30" y="140" width="170" height="48" rx="24"/><text x="115" y="169">draft</text></g>
+  <path class="a farmer" d="M196 178C252 186 252 226 172 188" marker-end="url(#hf)"/>
+  <text class="al farmer" x="232" y="226">✏️ fix by voice</text>
   <g class="st"><rect x="300" y="140" width="170" height="48" rx="24"/><text x="385" y="169">farmer_confirmed</text></g>
   <g class="st green"><rect x="620" y="60" width="170" height="48" rx="24"/><text x="705" y="89">auto_approved</text></g>
   <g class="st amber"><rect x="620" y="220" width="170" height="48" rx="24"/><text x="705" y="249">needs_review</text></g>
@@ -264,7 +276,7 @@ footer{font:12px var(--mono);color:var(--muted)}
   <text class="al expert" x="1044" y="168">approve</text>
 </svg>
     </div>
-    <figcaption>The database refuses any other move (<code>STATUS_TRANSITIONS</code>). <code>corrected</code> is reachable only after an agronomist correction with a reason has been written; an auto-approved record can be corrected too. Discarded is final, and records are never deleted.</figcaption>
+    <figcaption>A note missing a parcel, date, product or quantity is not stored until the farmer answers (at most two questions); then it appears in the console as a draft. A farmer's ✏️ fix is logged as a correction by the farmer and keeps the status. The database refuses any move not drawn here (<code>STATUS_TRANSITIONS</code>): <code>corrected</code> needs an agronomist correction with a reason, an auto-approved record can be corrected too, discarded is final, and records are never deleted.</figcaption>
   </figure>
 </section>
 
@@ -274,11 +286,11 @@ footer{font:12px var(--mono);color:var(--muted)}
   <div class="legend">
     <span><i class="l-ours"></i>container</span>
     <span><i class="l-data"></i>database and volumes</span>
-    <span><b class="warn" style="border-top-style:solid"></b>Telegram polling, one copy only</span>
+    <span><b class="warn" style="border-top-style:solid"></b>Telegram polling, one copy per bot token</span>
   </div>
   <figure>
     <div class="frame">
-<svg viewBox="0 0 1200 400" role="img" aria-label="Deployment: Person 2's Mac runs web, bot, seed and PostgreSQL in Docker; PostgreSQL is published on port 5432 so a bot on Person 1's laptop can use the same database over Wi-Fi; only one bot copy, either the container or the laptop, may poll Telegram.">
+<svg viewBox="0 0 1200 400" role="img" aria-label="Deployment: Person 2's Mac runs web, bot, seed and PostgreSQL in Docker, and its bot is the only one polling @wnroll_bot; Person 1's laptop reaches the same PostgreSQL over Wi-Fi on port 5432 and develops with a separate test bot token.">
   <defs>
     <marker id="hd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker>
     <marker id="hw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--warn)"/></marker>
@@ -321,24 +333,25 @@ footer{font:12px var(--mono);color:var(--muted)}
   <rect class="zone alt" x="800" y="24" width="380" height="150" rx="10"/>
   <text class="zl alt" x="816" y="46">PERSON 1'S LAPTOP · SAME WI-FI</text>
   <g class="n n-ours"><rect x="820" y="62" width="340" height="90" rx="6"/>
-    <text class="t" x="836" y="88">bot, while developing</text>
-    <text class="s" x="836" y="108">python -m app.bot</text>
-    <text class="s" x="836" y="126">DATABASE_URL → 172.21.30.74:5432</text></g>
+    <text class="t" x="836" y="88">bot, development copy</text>
+    <text class="s" x="836" y="108">own test token from @BotFather</text>
+    <text class="s" x="836" y="126">DATABASE_URL → 172.21.30.74:5432</text>
+    <text class="s" x="836" y="144">DB_SCHEMA=p1_dev keeps tests apart</text></g>
   <path class="a" d="M820 110H702" marker-end="url(#hd)"/>
   <text class="al" x="728" y="102">Wi-Fi</text><text class="al" x="728" y="128">port 5432</text>
 
   <!-- Telegram -->
   <g class="n n-tg"><rect x="820" y="250" width="340" height="80" rx="6"/>
     <text class="t" x="836" y="276">Telegram Bot API</text>
-    <text class="s" x="836" y="296">@wnroll_bot · long polling</text>
-    <text class="s" x="836" y="314">rejects a second poller</text></g>
+    <text class="s" x="836" y="296">@wnroll_bot ← Docker bot (demo)</text>
+    <text class="s" x="836" y="314">test bot ← Person 1's laptop</text></g>
   <path class="a warn" d="M260 262H818" marker-end="url(#hw)"/>
-  <text class="al warn" x="440" y="256">polls · either here</text>
-  <path class="a warn dash" d="M990 152V248" marker-end="url(#hw)"/>
-  <text class="al warn" x="998" y="206">or here, never both</text>
+  <text class="al warn" x="440" y="256">polls @wnroll_bot · the only copy</text>
+  <path class="a dash" style="stroke-dasharray:6 4" d="M990 152V248" marker-end="url(#hd)"/>
+  <text class="al" x="998" y="206">polls its own test bot</text>
 </svg>
     </div>
-    <figcaption>The database is the only thing both laptops share. The bot runs in exactly one place: in the Mac's Docker for the demo, or on Person 1's laptop while they change its code. Two copies polling the same token makes Telegram return <code>Conflict</code> and split voice notes between them.</figcaption>
+    <figcaption>The database is the only thing both laptops share. @wnroll_bot runs in the Mac's Docker; Person 1 develops with a second bot token, because two copies polling one token make Telegram return <code>Conflict</code> and split voice notes between them. A development copy should also set <code>DB_SCHEMA=p1_dev</code> (and run the seed once) so its test records stay out of the real log, where records can never be deleted.</figcaption>
   </figure>
 </section>
 
@@ -347,19 +360,21 @@ footer{font:12px var(--mono);color:var(--muted)}
   <h2>Four flows</h2>
   <div class="flows">
     <div class="flow"><h3><b>A</b>Log an activity</h3><ol>
+      <li><code>/start</code> asks the farmer's name; <code>/help</code> lists parcels and what the bot does.</li>
       <li>Voice note to the bot; Scribe returns text and language.</li>
       <li>Gemma 4 maps spoken names to parcels and returns one record per activity, with dates resolved in Europe/Madrid.</li>
-      <li>Missing parcel or quantity: the bot asks once more.</li>
-      <li>The judge scores dose, crop and date; the card comes back in the farmer's language, as text and voice.</li>
-      <li>✅ saves it; the console shows it within 2 s.</li></ol>
-      <div class="time">Scribe ~1 s · Gemma extraction varies</div></div>
-    <div class="flow"><h3><b>B</b>Expert correction</h3><ol>
-      <li>The agronomist opens <em>Needs review</em> and picks Correct.</li>
-      <li>One field, a new value and a required reason.</li>
-      <li>The value and a <code>corrections</code> row are written in one transaction; status becomes corrected.</li>
+      <li>Missing parcel, date, product or quantity: up to two questions, nothing saved yet.</li>
+      <li>The card comes back in the farmer's language, as text and voice, and the draft appears in the console.</li>
+      <li>✅: the judge scores dose, crop and date; auto-approved or needs review.</li></ol>
+      <div class="time">Scribe ~1 s · Gemma up to 3 tries × 30 s</div></div>
+    <div class="flow"><h3><b>B</b>Correct a record</h3><ol>
+      <li>Farmer: ✏️ on the card, then says the fix ("it was 14, not 40"); Gemma finds the changed field.</li>
+      <li>Agronomist: <em>Needs review</em>, Correct, one field, a new value and a required reason.</li>
+      <li>The value and a <code>corrections</code> row are written in one transaction.</li>
+      <li>Within 10 s the bot tells the farmer what the agronomist changed.</li>
       <li>The next extraction prompt includes the correction as an example.</li></ol></div>
     <div class="flow"><h3><b>C</b>Excel report</h3><ol>
-      <li>Download report in the console, or the bot's <code>/report</code>.</li>
+      <li>Download report in the console. The bot's <code>/report</code> is not built yet.</li>
       <li>The sample workbook is the template: same tabs, colours and dropdowns.</li>
       <li>Lookups and dose per hectare stay live formulas.</li></ol></div>
     <div class="flow"><h3><b>D</b>Ask by voice</h3><ol>
@@ -377,8 +392,8 @@ footer{font:12px var(--mono);color:var(--muted)}
   <div class="tbl"><table>
     <thead><tr><th>Component</th><th>Code</th><th>Owner</th><th>Talks to</th></tr></thead>
     <tbody>
-      <tr><td>Telegram bot</td><td><code>app/bot.py</code></td><td>Person 1</td><td>Telegram, voice, extractor, judge, database</td></tr>
-      <tr><td>Extractor</td><td><code>app/gemma.py</code>, <code>app/prompts/</code></td><td>Person 1</td><td>Gemma 4 26B, 31B as fallback; reads parcels, vocabulary, last corrections</td></tr>
+      <tr><td>Telegram bot</td><td><code>app/bot.py</code></td><td>Person 1</td><td>Telegram, voice, extractor, judge, database; checks for agronomist edits every 10 s; text-only replies if ffmpeg is missing</td></tr>
+      <tr><td>Extractor</td><td><code>app/gemma.py</code>, <code>app/prompts/</code></td><td>Person 1</td><td>Gemma 4 26B twice, then 31B; JSON mode, plain JSON if refused; reads parcels, vocabulary, last corrections; turns dd/mm/yyyy and "ahir" into ISO dates</td></tr>
       <tr><td>Judge</td><td><code>app/validator.py</code></td><td>Person 1</td><td>Rules only: dose range, crop vs parcel, future date, unknown keys, missing fields</td></tr>
       <tr><td>Voice in and out</td><td><code>app/voice.py</code></td><td>Person 2</td><td>Scribe v2 with farm keyterms; TTS v4 turbo; ffmpeg to OGG/Opus; cached</td></tr>
       <tr><td>Console and API</td><td><code>app/web.py</code>, <code>web/index.html</code></td><td>Person 2</td><td>Database; login on every route except health</td></tr>
