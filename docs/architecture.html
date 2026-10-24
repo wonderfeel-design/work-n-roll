@@ -94,7 +94,7 @@ footer{font:12px var(--mono);color:var(--muted)}
 
 <div class="wrap">
 <header>
-  <div class="eyebrow">SA.TECH Field Voice · as built · 24 Oct 2026, 17:30</div>
+  <div class="eyebrow">SA.TECH Field Voice · as built · 24 Oct 2026, 18:00</div>
   <h1>Field Voice architecture</h1>
   <p>A farmer logs field work by Telegram voice note in English, Russian, Catalan or Spanish. The bot transcribes it, Gemma 4 turns it into a record, a rule-based judge scores it, and the farmer confirms it. An agronomist reviews and corrects records on a web console, asks questions by voice, and downloads the Excel log. Every process reads and writes one PostgreSQL database.</p>
 </header>
@@ -112,7 +112,7 @@ footer{font:12px var(--mono);color:var(--muted)}
   </div>
   <figure>
     <div class="frame">
-<svg viewBox="0 0 1200 690" role="img" aria-label="Data flow: the Telegram bot and the web console both read and write one PostgreSQL database; the bot calls ElevenLabs Scribe and Gemma 4, the console's voice assistant calls Scribe, Gemini Flash and ElevenLabs TTS, and stored corrections feed back into Gemma's extraction prompt.">
+<svg viewBox="0 0 1200 690" role="img" aria-label="Data flow: the Telegram bot and the web console both read and write one PostgreSQL database; the bot calls ElevenLabs Scribe and Gemma 4, the console's voice assistant calls Scribe, a chain of Gemini Flash models with Gemma last, and ElevenLabs TTS, and stored corrections feed back into Gemma's extraction prompt.">
   <defs>
     <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--arrow)"/></marker>
     <marker id="hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--loop)"/></marker>
@@ -197,11 +197,12 @@ footer{font:12px var(--mono);color:var(--muted)}
   <text class="al" x="616" y="474">read · write</text>
 
   <!-- externals -->
-  <g class="n n-gemma"><rect x="950" y="40" width="230" height="170" rx="6"/>
+  <g class="n n-gemma"><rect x="950" y="40" width="230" height="214" rx="6"/>
     <text class="t" x="966" y="66">Gemini API</text>
     <rect class="sub" x="966" y="78" width="198" height="34" rx="4"/><text class="s" x="976" y="99">Gemma 4 26B · extract ×2</text>
     <rect class="sub" x="966" y="120" width="198" height="34" rx="4"/><text class="s" x="976" y="141">Gemma 4 31B · 3rd try</text>
-    <rect class="sub" x="966" y="162" width="198" height="34" rx="4"/><text class="s" x="976" y="183">Gemini 3.5 Flash · Q&amp;A</text></g>
+    <rect class="sub" x="966" y="162" width="198" height="34" rx="4"/><text class="s" x="976" y="183">Q&amp;A: 3.5 Flash → Lite ×2</text>
+    <rect class="sub" x="966" y="204" width="198" height="34" rx="4"/><text class="s" x="976" y="225">Q&amp;A last resort: Gemma</text></g>
   <g class="n n-el"><rect x="950" y="410" width="230" height="160" rx="6"/>
     <text class="t" x="966" y="436">ElevenLabs</text>
     <rect class="sub" x="966" y="448" width="198" height="34" rx="4"/><text class="s" x="976" y="469">Scribe v2 · speech → text</text>
@@ -215,13 +216,15 @@ footer{font:12px var(--mono);color:var(--muted)}
   <text class="al" x="616" y="116">transcribe · speak reply</text>
 
   <!-- web -> externals -->
-  <path class="a" d="M610 516H934V190H948" marker-end="url(#h)"/>
+  <path class="a" d="M610 516H934V180H948" marker-end="url(#h)"/>
   <text class="al" x="616" y="508">question + totals → answer</text>
+  <text class="al" x="942" y="276">first model</text>
+  <text class="al" x="942" y="292">with quota</text>
   <path class="a" d="M610 552H948" marker-end="url(#h)"/>
   <text class="al" x="616" y="544">assistant: Scribe · TTS</text>
 </svg>
     </div>
-    <figcaption>Both processes reach the outside world directly: the bot calls Scribe and Gemma for every voice note (Gemma 26B twice, then 31B, 30 s each), and the console's voice assistant calls Scribe, Gemini Flash and TTS. They share nothing but the database: the bot learns about the agronomist's edits by checking it every 10 s and tells the farmer in Telegram. The orange dashed line is what makes the judge learn: each correction becomes an example in Gemma's next extraction prompt. The dotted alert to the agronomist's Telegram is off until <code>AGRONOMIST_CHAT_ID</code> is set.</figcaption>
+    <figcaption>Both processes reach the outside world directly: the bot calls Scribe and Gemma for every voice note (Gemma 26B twice, then 31B, 30 s each), and the console's voice assistant calls Scribe, a chain of answer models and TTS. The chain is Gemini 3.5 Flash, 3.1 Flash-Lite, 3.5 Flash-Lite, then Gemma: the free tier allows about 20 requests a day per model, and a model that reports its allowance used up is skipped until it resets. They share nothing but the database: the bot learns about the agronomist's edits by checking it every 10 s and tells the farmer in Telegram. The orange dashed line is what makes the judge learn: each correction becomes an example in Gemma's next extraction prompt. The dotted alert to the agronomist's Telegram is off until <code>AGRONOMIST_CHAT_ID</code> is set.</figcaption>
   </figure>
 </section>
 
@@ -380,9 +383,9 @@ footer{font:12px var(--mono);color:var(--muted)}
     <div class="flow"><h3><b>D</b>Ask by voice</h3><ol>
       <li>Tap the orb and ask; a pause ends the question.</li>
       <li>Scribe transcribes; the server computes totals and averages in Python.</li>
-      <li>Gemini Flash phrases the answer; TTS speaks it in the chosen voice with subtitles.</li>
+      <li>The first model in the chain with quota left phrases the answer; TTS speaks it in the chosen voice with subtitles.</li>
       <li>It listens again for a follow-up.</li></ol>
-      <div class="time">~3 s from question to answer</div></div>
+      <div class="time">~3 s from question to answer · 15 s limit per model</div></div>
   </div>
 </section>
 
@@ -398,7 +401,7 @@ footer{font:12px var(--mono);color:var(--muted)}
       <tr><td>Voice in and out</td><td><code>app/voice.py</code></td><td>Person 2</td><td>Scribe v2 with farm keyterms; TTS v4 turbo; ffmpeg to OGG/Opus; cached</td></tr>
       <tr><td>Console and API</td><td><code>app/web.py</code>, <code>web/index.html</code></td><td>Person 2</td><td>Database; login on every route except health</td></tr>
       <tr><td>Excel report</td><td><code>app/export.py</code></td><td>Person 2</td><td>Database; the sample workbook as template</td></tr>
-      <tr><td>Voice assistant</td><td><code>app/assistant.py</code></td><td>Person 2</td><td>Gemini 3.5 Flash, Gemma as fallback; read-only over the database</td></tr>
+      <tr><td>Voice assistant</td><td><code>app/assistant.py</code></td><td>Person 2</td><td>Model chain from <code>ASSISTANT_MODELS</code>: 3.5 Flash, 3.1 Flash-Lite, 3.5 Flash-Lite, Gemma 26B; skips a model out of daily quota until it resets; read-only over the database</td></tr>
       <tr><td>Shared contract</td><td><code>app/schemas.py</code>, <code>app/db.py</code>, <code>app/seed.py</code></td><td>Both</td><td>PostgreSQL through <code>DATABASE_URL</code>; changed only by agreement</td></tr>
     </tbody>
   </table></div>
@@ -412,6 +415,7 @@ footer{font:12px var(--mono);color:var(--muted)}
     <li><strong>PostgreSQL instead of SQLite.</strong> A file database only worked while bot and console ran on one machine; Person 1's records never reached the console.</li>
     <li><strong>Strict corrections.</strong> Corrections train the judge, so the database enforces them: foreign key to the record, required reason, append-only, no deleted records.</li>
     <li><strong>Gemini Flash for spoken answers.</strong> Gemma 4 thinks 12–18 s before every answer on this API, which is too slow for a conversation; it still does all extraction.</li>
+    <li><strong>A chain of answer models.</strong> The free tier allows about 20 requests a day per model, and one model ran out during testing. Several Flash models with separate allowances keep the assistant answering; enabling billing on the Gemini key removes the limit for the demo.</li>
     <li><strong>Numbers from Python, words from the model.</strong> The assistant gets precomputed totals, so arithmetic is exact and the model can't change data.</li>
     <li><strong>Polling, not live push.</strong> The console asks every 2 s; it looks the same in a demo and needs no extra server pieces.</li>
   </ul>
