@@ -1,0 +1,84 @@
+# Render Blueprint for the cloud copy of Work'n'Roll (branch `cloud` only; main stays as it is).
+# Creates: the agronomist console (web), the Telegram bot (worker) and PostgreSQL 16, in Frankfurt.
+# Secrets marked `sync: false` are asked for once when the Blueprint is created. See DEPLOY.md.
+
+services:
+  - type: web
+    name: workn-roll-console
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: cloud
+    region: frankfurt
+    plan: 0.5c-512mb             # always on (the free plan sleeps after 15 min)
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    preDeployCommand: python -m app.seed   # reference data only; records are never touched
+    envVars:
+      - key: PORT                # the image's uvicorn listens on 8000
+        value: "8000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: workn-roll-db
+          property: connectionString
+      - key: WEB_USER
+        value: agronomist
+      - key: WEB_PASSWORD        # choose a strong one; the console is public
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: GEMMA_MODEL
+        value: gemma-4-26b-a4b-it
+      - key: ASSISTANT_MODELS
+        value: gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.5-flash-lite,gemma-4-26b-a4b-it
+      - key: ELEVENLABS_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_TTS_MODEL
+        value: eleven_v4_turbo
+      - key: ELEVENLABS_STT_MODEL
+        value: scribe_v2
+      - key: TZ_NAME
+        value: Europe/Madrid
+
+  - type: worker
+    name: workn-roll-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m app.bot
+    branch: cloud
+    region: frankfurt
+    plan: 0.5c-512mb
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: workn-roll-db
+          property: connectionString
+      - key: TELEGRAM_TOKEN      # a SECOND bot from @BotFather, not the one used on the Macs
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: AGRONOMIST_CHAT_ID  # optional: leave empty to skip review notifications
+        sync: false
+      - key: GEMMA_MODEL
+        value: gemma-4-26b-a4b-it
+      - key: ELEVENLABS_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_TTS_MODEL
+        value: eleven_v4_turbo
+      - key: ELEVENLABS_STT_MODEL
+        value: scribe_v2
+      - key: TZ_NAME
+        value: Europe/Madrid
+
+databases:
+  - name: workn-roll-db
+    databaseName: fieldvoice
+    user: fieldvoice
+    postgresMajorVersion: "16"   # same as docker-compose.yml, so pg_dump/pg_restore just work
+    plan: 0.1c-256mb             # smallest paid plan; the free one expires after 30 days
+    region: frankfurt
+    ipAllowList: []              # no connections from outside Render's private network
