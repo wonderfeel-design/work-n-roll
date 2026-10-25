@@ -6,14 +6,18 @@ The workbook's Field_Log and Corrections rows are format examples and are never 
     python -m app.seed           # create tables, load / refresh reference data
     python -m app.seed --reset   # drop every table first (loses all records and corrections)
 """
+import os
 import sys
+from pathlib import Path
 
 from openpyxl import load_workbook
 from psycopg import sql
 
 from app import ROOT, db
 
-SAMPLE_XLSX = ROOT / "data" / "satech_dun_field_log_sample.xlsx"
+# Docker sets SAMPLE_XLSX to the read-only folder mount of ./data, so a git checkout that replaces the
+# file is seen at once (a single-file mount keeps pointing at the replaced, deleted file).
+SAMPLE_XLSX = Path(os.getenv("SAMPLE_XLSX") or ROOT / "data" / "satech_dun_field_log_sample.xlsx")
 SIGPAC_PARTS = db.SIGPAC_PARTS
 TABLES = ("corrections", "field_log", "farmers", "parcels", "ui_strings", "vocabulary")
 
