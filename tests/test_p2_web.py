@@ -132,3 +132,22 @@ def test_branding_and_public_icons(client):
     assert "<title>Work'n'Roll · Epic Reporting</title>" in page and 'href="static/favicon-64.png"' in page
     assert "Field Voice" not in page
     assert client.get("/static/../app/db.py").status_code == 404           # only the icon folder is public
+
+
+def test_add_parcel_from_the_console(client):
+    body = {"spoken_names": ["els cirerers", "cherry block"], "crop_key": "cherry", "area_ha": 1.5,
+            "crop_labels": {"en": "Cherry", "ca": "Cirerer", "es": "Cerezo", "ru": "Вишня"},
+            "variety": "Lapins", "irrigation": "regadiu"}
+    assert client.post("/api/parcels", json=body).status_code == 401
+    r = client.post("/api/parcels", auth=AUTH, json=body)
+    assert r.status_code == 201, r.text
+    assert (r.json()["alias"], r.json()["crop_key"]) == ("P6", "cherry")
+    assert any(v["key"] == "cherry" for v in client.get("/api/vocabulary", auth=AUTH).json())
+    # same name again -> 409; missing area -> 422; bad irrigation -> 422; nothing added
+    assert client.post("/api/parcels", auth=AUTH, json=body | {"spoken_names": ["Cherry Block"]}).status_code == 409
+    assert client.post("/api/parcels", auth=AUTH, json=body | {"spoken_names": ["x"], "area_ha": None}).status_code == 422
+    assert client.post("/api/parcels", auth=AUTH, json=body | {"spoken_names": ["y"], "irrigation": "flood"}).status_code == 422
+    assert [p["alias"] for p in client.get("/api/parcels", auth=AUTH).json()] == ["P1", "P2", "P3", "P4", "P5", "P6"]
+    # a record can use the new plot straight away
+    rid = _record(parcel_alias="P6")
+    assert client.get(f"/api/records/{rid}", auth=AUTH).json()["crop_en"] == "Cherry"

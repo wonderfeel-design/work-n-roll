@@ -22,7 +22,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, ValidationError
 
 from app import ROOT, assistant, db, export, voice
-from app.schemas import LANGS, STATUS_TRANSITIONS, Record
+from app.schemas import LANGS, STATUS_TRANSITIONS, ParcelDraft, Record
 
 INDEX_HTML = ROOT / "web" / "index.html"
 STATIC_DIR = ROOT / "web" / "static"  # app icons: public, browsers fetch favicons without the login
@@ -132,6 +132,19 @@ def parcels() -> list[dict]:
 @api.get("/vocabulary")
 def vocabulary() -> list[dict]:
     return db.get_vocabulary()
+
+
+@api.post("/parcels", status_code=201)
+def add_parcel(body: ParcelDraft) -> dict:
+    """Add a plot from the console (same rules as the bot's /newplot): name, crop and area required,
+    one crop per plot, names unique across plots, a new crop needs its English name."""
+    try:
+        alias = db.add_parcel(body)
+    except db.NameTaken as e:
+        raise HTTPException(409, f"“{e.name}” is already a name of {e.alias}")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return next(p for p in db.get_parcels() if p["alias"] == alias)
 
 
 @api.get("/voices")

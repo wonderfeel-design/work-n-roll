@@ -30,8 +30,10 @@ from app.schemas import (
     CORRECTORS,
     EDITABLE_FIELDS,
     LANGS,
+    PARCEL_REQUIRED,
     STATUS_TRANSITIONS,
     STATUSES,
+    ParcelDraft,
     Record,
 )
 
@@ -351,6 +353,62 @@ def get_parcels() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM parcels ORDER BY alias").fetchall()
     return [{**r, "spoken_names": [s.strip() for s in r["spoken_names"].split(";") if s.strip()]} for r in rows]
+
+
+SIGPAC_PARTS = ("sigpac_prov", "sigpac_mun", "sigpac_agregat", "sigpac_zona",
+                "sigpac_poligon", "sigpac_parcela", "sigpac_recinte")
+
+
+class NameTaken(ValueError):
+    """A plot name already belongs to another plot."""
+
+    def __init__(self, name: str, alias: str):
+        super().__init__(f"{name!r} is already a name of {alias}")
+        self.name, self.alias = name, alias
+
+
+def add_parcel(draft: ParcelDraft) -> str:
+    """Store a new plot and return its alias (P6, P7, ...). One crop per plot.
+
+    Raises ValueError when a name, the crop or the area is missing, NameTaken when a name already
+    belongs to another plot, and ValueError for a crop that is neither in the vocabulary nor comes
+    with its English name in crop_labels (then it is added to the vocabulary).
+    """
+    missing = [f for f in PARCEL_REQUIRED if not getattr(draft, f)]
+    if missing:
+        raise ValueError(f"missing: {', '.join(missing)}")
+    with _connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(4243)")   # one new plot at a time: aliases stay unique
+        parcels = conn.execute("SELECT alias, spoken_names, campaign, explotacio_id FROM parcels ORDER BY alias").fetchall()
+        for p in parcels:
+            taken = {s.strip().lower(): s.strip() for s in p["spoken_names"].split(";")}
+            for name in draft.spoken_names:
+                if name.lower() in taken or name.lower() == p["alias"].lower():
+                    raise NameTaken(name, p["alias"])
+
+        crops = {r["key"] for r in conn.execute("SELECT key FROM vocabulary WHERE type = 'crop'").fetchall()}
+        if draft.crop_key not in crops:
+            labels = draft.crop_labels.model_dump() if draft.crop_labels else {}
+            if not labels.get("en"):
+                raise ValueError(f"crop {draft.crop_key!r} is not in the vocabulary; give its name in English "
+                                 "(and ideally ca, es, ru) to add it")
+            conn.execute("INSERT INTO vocabulary (key, type, en, ca, es, ru) VALUES (%s, 'crop', %s, %s, %s, %s)",
+                         (draft.crop_key, labels.get("en"), labels.get("ca"), labels.get("es"), labels.get("ru")))
+
+        numbers = [int(p["alias"][1:]) for p in parcels if p["alias"][:1] == "P" and p["alias"][1:].isdigit()]
+        alias = f"P{max(numbers, default=0) + 1}"
+        parts = [int(x) for x in draft.sigpac_ref.split("-")] if draft.sigpac_ref else [None] * 7
+        first = parcels[0] if parcels else {}
+        row = {"alias": alias, "spoken_names": "; ".join(draft.spoken_names),
+               "campaign": first.get("campaign") or str(dt.date.today().year),
+               "explotacio_id": first.get("explotacio_id"), **dict(zip(SIGPAC_PARTS, parts)),
+               "sigpac_ref": draft.sigpac_ref or "", "crop_key": draft.crop_key, "variety": draft.variety,
+               "area_ha": draft.area_ha, "irrigation": draft.irrigation}
+        cols = list(row)
+        conn.execute(sql.SQL("INSERT INTO parcels ({}) VALUES ({})").format(
+            sql.SQL(", ").join(map(sql.Identifier, cols)), sql.SQL(", ").join(sql.Placeholder() * len(cols))),
+            list(row.values()))
+    return alias
 
 
 def get_vocabulary() -> list[dict]:

@@ -108,3 +108,78 @@ class Record(Extracted):                 # what is stored
         if v is not None and not 0.0 <= v <= 1.0:
             raise ValueError("judge_score must be between 0 and 1")
         return v
+
+
+# --- new plots (bot /newplot and the web form) ----------------------------------
+
+Irrigation = Literal["regadiu", "secà"]   # DUN terms, as in Parcels_DUN
+PARCEL_REQUIRED: tuple[str, ...] = ("spoken_names", "crop_key", "area_ha")
+
+
+class CropLabels(BaseModel):
+    """A new crop's name per language. Fixed fields, not a dict: Gemini's JSON mode rejects free-form maps."""
+    en: Optional[str] = None
+    ca: Optional[str] = None
+    es: Optional[str] = None
+    ru: Optional[str] = None
+
+    @field_validator("en", "ca", "es", "ru")
+    @classmethod
+    def _strip(cls, v: Optional[str]) -> Optional[str]:
+        return (v or "").strip() or None
+
+
+class ParcelDraft(BaseModel):
+    """A plot to add: what Gemma reads from the farmer's description, or what the web form sends.
+
+    One crop per plot. crop_key is a vocabulary key; for a crop not in the vocabulary yet,
+    crop_labels gives its name in en / ca / es / ru and db.add_parcel adds it.
+    """
+    lang: Lang = "en"
+    spoken_names: list[str] = []          # what the farmer calls it, in any language
+    crop_key: Optional[str] = None
+    crop_labels: Optional[CropLabels] = None
+    variety: Optional[str] = None
+    area_ha: Optional[float] = None
+    irrigation: Optional[Irrigation] = None
+    sigpac_ref: Optional[str] = None      # prov-mun-agregat-zona-poligon-parcela-recinte, if known
+    missing_fields: list[str] = []
+
+    @field_validator("spoken_names")
+    @classmethod
+    def _names(cls, v: list[str]) -> list[str]:
+        out = []
+        for name in (n.strip() for n in v):
+            if name and name.lower() not in {o.lower() for o in out}:
+                out.append(name[:60])
+        return out
+
+    @field_validator("crop_key")
+    @classmethod
+    def _crop_key(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        key = "_".join(v.strip().lower().replace("-", " ").split())
+        return key or None
+
+    @field_validator("crop_labels")
+    @classmethod
+    def _labels(cls, v: Optional[CropLabels]) -> Optional[CropLabels]:
+        return v if v is not None and any(v.model_dump().values()) else None
+
+    @field_validator("area_ha")
+    @classmethod
+    def _area(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError("area_ha must be greater than 0")
+        return v
+
+    @field_validator("sigpac_ref")
+    @classmethod
+    def _sigpac(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return None
+        parts = v.strip().split("-")
+        if len(parts) != 7 or not all(p.isdigit() for p in parts):
+            raise ValueError("sigpac_ref needs 7 numbers: prov-mun-agregat-zona-poligon-parcela-recinte")
+        return "-".join(str(int(p)) for p in parts)

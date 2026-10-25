@@ -162,6 +162,24 @@
                    background: var(--card); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
   @media (max-width: 760px) { .voices { position: static; padding: 0 20px 12px; } main { padding-bottom: 260px; } }
 
+  /* --- plots dialog --- */
+  dialog.plots { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line);
+                 border-radius: 10px; background: var(--card); color: var(--ink); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  dialog.plots::backdrop { background: rgba(20, 26, 18, .45); }
+  .plots .head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .plots h2 { margin: 0; font-size: 17px; }
+  .plots .body { padding: 14px 18px 18px; display: grid; gap: 16px; overflow: auto; max-height: calc(100vh - 120px); }
+  .plots table td, .plots table th { padding: 5px 8px; }
+  .plots h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .plotform { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .plotform label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .plotform .wide { grid-column: 1 / -1; }
+  .plotform input, .plotform select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); }
+  .plotform input:focus, .plotform select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .plotform .labels { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .plotform .err { grid-column: 1 / -1; color: var(--danger); font-size: 13px; }
+  .plotform .actions { grid-column: 1 / -1; margin: 0; }
+
   #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 8px 14px; border-radius: 6px;
            background: var(--ink); color: var(--bg); opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.on { opacity: 1; }
@@ -176,6 +194,7 @@
     <span class="seg" role="group" aria-label="Language">
       <button class="btn" data-lang="ca">CA</button><button class="btn" data-lang="en">EN</button>
     </span>
+    <button class="btn" id="plots-open" type="button"></button>
     <a class="btn primary" id="report" href="api/report.xlsx" download></a>
   </div>
 </header>
@@ -205,6 +224,29 @@
   <div class="subs" id="subs" aria-live="polite"></div>
 </div>
 <label class="voices"><span id="voice-label"></span><select id="voice"></select></label>
+<dialog class="plots" id="plots" aria-labelledby="plots-title">
+  <div class="head"><h2 id="plots-title"></h2><button class="btn small" type="button" id="plots-close"></button></div>
+  <div class="body">
+    <div class="scroll"><table><thead><tr id="plots-head"></tr></thead><tbody id="plots-rows"></tbody></table></div>
+    <h3 id="plot-form-title"></h3>
+    <form class="plotform" id="plot-form" novalidate>
+      <label class="wide"><span data-l="plotNames"></span><input id="pf-names" name="names" required autocomplete="off"></label>
+      <label><span data-l="crop"></span><select id="pf-crop" name="crop"></select></label>
+      <label><span data-l="area"></span><input id="pf-area" name="area" type="number" step="0.01" min="0.01" required></label>
+      <label><span data-l="variety"></span><input id="pf-variety" name="variety" autocomplete="off"></label>
+      <label><span data-l="irrigation"></span><select id="pf-irrigation" name="irrigation"></select></label>
+      <div class="labels" id="pf-labels" hidden>
+        <label>EN<input id="pf-l-en" name="l_en" autocomplete="off"></label>
+        <label>CA<input id="pf-l-ca" name="l_ca" autocomplete="off"></label>
+        <label>ES<input id="pf-l-es" name="l_es" autocomplete="off"></label>
+        <label>RU<input id="pf-l-ru" name="l_ru" autocomplete="off"></label>
+      </div>
+      <label class="wide"><span data-l="sigpac"></span><input id="pf-sigpac" name="sigpac" placeholder="25-120-0-0-7-50-1" autocomplete="off"></label>
+      <div class="err" id="pf-err" hidden></div>
+      <div class="actions"><button class="btn primary" type="submit" data-l="addPlot"></button></div>
+    </form>
+  </div>
+</dialog>
 <div id="toast" role="status"></div>
 
 <script>
@@ -212,7 +254,7 @@
 const T = {
   ca: {
     subtitle: "Epic Reporting", live: "en directe", paused: "en pausa (corregint)", offline: "sense connexió",
-    review: "Només pendents", report: "Descarrega l'informe", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
+    review: "Només pendents", report: "Descarrega l'informe", plots: "Parcel·les", plotsBtn: "＋ Parcel·la", close: "Tanca", addPlotTitle: "Afegeix una parcel·la", addPlot: "Afegeix la parcel·la", plotNames: "Noms (separats per comes, com els diu el pagès)", crop: "Cultiu", area: "Superfície (ha)", variety: "Varietat", irrigation: "Reg", irrigated: "regadiu", dryland: "secà", newCrop: "Cultiu nou…", cropNames: "Nom del cultiu: EN obligatori", sigpac: "Referència SIGPAC (opcional)", plotAdded: "afegida", plotCols: ["Parcel·la", "Noms", "Cultiu", "Superfície", "Reg"], needNames: "Cal un nom, el cultiu i la superfície.", empty: "Encara no hi ha registres. Envia una nota de veu al bot.",
     emptyReview: "Res pendent de revisió.", corrTitle: "El que aprèn el model", noCorr: "Encara no hi ha correccions.",
     cols: ["Data", "Pagès", "Parcel·la", "Cultiu", "Activitat", "Producte", "Quantitat", "Dosi/ha",
            "Estat", "Jutge", "Transcripció original"],
@@ -230,7 +272,7 @@ const T = {
   },
   en: {
     subtitle: "Epic Reporting", live: "live", paused: "paused (correcting)", offline: "offline",
-    review: "Needs review only", report: "Download report", empty: "No records yet. Send a voice note to the bot.",
+    review: "Needs review only", report: "Download report", plots: "Plots", plotsBtn: "＋ Plot", close: "Close", addPlotTitle: "Add a plot", addPlot: "Add plot", plotNames: "Names (comma-separated, as the farmer says them)", crop: "Crop", area: "Area (ha)", variety: "Variety", irrigation: "Irrigation", irrigated: "irrigated", dryland: "dryland", newCrop: "New crop…", cropNames: "Crop name: EN required", sigpac: "SIGPAC reference (optional)", plotAdded: "added", plotCols: ["Plot", "Names", "Crop", "Area", "Irrigation"], needNames: "A name, the crop and the area are required.", empty: "No records yet. Send a voice note to the bot.",
     emptyReview: "Nothing needs review.", corrTitle: "What the model learns from", noCorr: "No corrections yet.",
     cols: ["Date", "Farmer", "Parcel", "Crop", "Activity", "Product", "Quantity", "Dose/ha",
            "Status", "Judge", "Original transcript"],
@@ -285,6 +327,8 @@ function renderChrome() {
   $("subtitle").textContent = t().subtitle;
   $("corr-title").textContent = t().corrTitle;
   $("report").textContent = `⬇ ${t().report}`;
+  $("plots-open").textContent = t().plotsBtn;
+  renderPlotsChrome();
   $("voice-label").textContent = t().voice;
   $("orb").setAttribute("aria-label", t().talk);
   renderVoices();
@@ -602,6 +646,76 @@ async function loadVoices() {
   renderVoices();
 }
 
+// --- plots: list and "add a plot" form (same rules as the bot's /newplot) --------------
+
+const cropName = key => {
+  const v = state.vocab.find(x => x.type === "crop" && x.key === key);
+  return v ? (v[state.lang] || v.en || key) : key;
+};
+
+function renderPlotsChrome() {
+  $("plots-title").textContent = t().plots;
+  $("plots-close").textContent = t().close;
+  $("plot-form-title").textContent = t().addPlotTitle;
+  for (const el of $("plot-form").querySelectorAll("[data-l]")) el.textContent = t()[el.dataset.l];
+  $("pf-labels").setAttribute("aria-label", t().cropNames);
+  $("plots-head").innerHTML = t().plotCols.map(c => `<th>${esc(c)}</th>`).join("");
+  const crop = $("pf-crop").value;
+  $("pf-crop").innerHTML = state.vocab.filter(v => v.type === "crop")
+    .map(v => `<option value="${esc(v.key)}">${esc(cropName(v.key))}</option>`).join("")
+    + `<option value="__new">${esc(t().newCrop)}</option>`;
+  if (crop) $("pf-crop").value = crop;
+  const irr = $("pf-irrigation").value;
+  $("pf-irrigation").innerHTML = `<option value="">—</option><option value="regadiu">${esc(t().irrigated)}</option>`
+    + `<option value="secà">${esc(t().dryland)}</option>`;
+  $("pf-irrigation").value = irr;
+  renderPlotRows();
+}
+
+function renderPlotRows() {
+  $("plots-rows").innerHTML = state.parcels.map(p => `<tr>
+    <td>${esc(p.alias)}<span class="sub">${esc(p.sigpac_ref || "")}</span></td>
+    <td class="wrap">${esc(p.spoken_names.join(", "))}</td>
+    <td>${esc(cropName(p.crop_key))}${p.variety ? `<span class="sub">${esc(p.variety)}</span>` : ""}</td>
+    <td class="num">${num(p.area_ha)} ha</td>
+    <td>${esc(p.irrigation === "regadiu" ? t().irrigated : p.irrigation === "secà" ? t().dryland : (p.irrigation || ""))}</td>
+  </tr>`).join("");
+}
+
+async function loadRefs() {
+  try { [state.parcels, state.vocab] = await Promise.all([api("parcels"), api("vocabulary")]); } catch {}
+  renderPlotsChrome();
+}
+
+$("plots-open").addEventListener("click", () => { renderPlotsChrome(); $("plots").showModal(); $("pf-names").focus(); });
+$("plots-close").addEventListener("click", () => $("plots").close());
+$("pf-crop").addEventListener("change", e => {
+  $("pf-labels").hidden = e.target.value !== "__new";
+  if (!$("pf-labels").hidden) $("pf-l-en").focus();
+});
+
+$("plot-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target.elements, err = $("pf-err");
+  const names = f.names.value.split(",").map(x => x.trim()).filter(Boolean);
+  const isNew = f.crop.value === "__new";
+  const body = {
+    spoken_names: names, area_ha: f.area.value ? Number(f.area.value) : null,
+    crop_key: isNew ? f.l_en.value.trim() : f.crop.value,
+    crop_labels: isNew ? { en: f.l_en.value, ca: f.l_ca.value, es: f.l_es.value, ru: f.l_ru.value } : null,
+    variety: f.variety.value.trim() || null, irrigation: f.irrigation.value || null,
+    sigpac_ref: f.sigpac.value.trim() || null, lang: state.lang,
+  };
+  if (!names.length || !body.crop_key || !body.area_ha) { err.textContent = t().needNames; err.hidden = false; return; }
+  try {
+    const p = await api("parcels", { method: "POST", body: JSON.stringify(body) });
+    err.hidden = true;
+    e.target.reset(); $("pf-labels").hidden = true;
+    await loadRefs();
+    toast(`${p.alias} ${t().plotAdded}`);
+  } catch (x) { err.textContent = x.message; err.hidden = false; }
+});
+
 // --- controls + polling -----------------------------------------------------------
 
 $("review").addEventListener("click", () => { state.reviewOnly = !state.reviewOnly; render(); });
@@ -623,7 +737,7 @@ async function refresh() {
 (async () => {
   renderChrome();
   loadVoices();
-  try { [state.parcels, state.vocab] = await Promise.all([api("parcels"), api("vocabulary")]); } catch {}
+  await loadRefs();
   await refresh();
   setInterval(refresh, POLL_MS);
 })();
