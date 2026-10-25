@@ -12,7 +12,9 @@ services:
     plan: 0.5c-512mb             # always on (the free plan sleeps after 15 min)
     autoDeployTrigger: commit
     healthCheckPath: /api/health
-    preDeployCommand: python -m app.seed   # reference data only; records are never touched
+    # Reference data only; records are never touched. Retries: on the first Blueprint deploy the new
+    # database can still be starting when this runs (seen as psycopg_pool.PoolTimeout).
+    preDeployCommand: sh -c 'for i in 1 2 3 4 5 6; do python -m app.seed && exit 0; echo "seed failed, retry $i/6 in 20 s"; sleep 20; done; exit 1'
     envVars:
       - key: PORT                # the image's uvicorn listens on 8000
         value: "8000"
