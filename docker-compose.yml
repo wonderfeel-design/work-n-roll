@@ -10,11 +10,14 @@ x-app: &app
   environment:
     # Containers reach the database by service name, not localhost
     DATABASE_URL: postgresql://fieldvoice:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/fieldvoice
+    SAMPLE_XLSX: /app/reference/satech_dun_field_log_sample.xlsx
   volumes:
     # Audio, TTS cache, logs and exports, shared by all services (records live in PostgreSQL)
     - fieldvoice-data:/app/data
-    # Reference workbook from the repo, so edits reach the next seed without a rebuild
-    - ./data/satech_dun_field_log_sample.xlsx:/app/data/satech_dun_field_log_sample.xlsx:ro
+    # The repo's data folder, read-only: the reference workbook is read from here (seed, Excel report).
+    # A folder, not a single-file mount: git replaces the file on checkout/merge, and a single-file
+    # mount would keep pointing at the deleted original ("No such file" until the container restarts).
+    - ./data:/app/reference:ro
   depends_on: &after-seed
     seed:
       condition: service_completed_successfully
