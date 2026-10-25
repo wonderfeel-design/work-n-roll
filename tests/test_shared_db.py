@@ -128,3 +128,55 @@ def test_farmer_lang():
     db.set_farmer_name(7, "Joan")
     db.set_farmer_lang(7, "ca")
     assert db.get_farmer_lang(7) == "ca" and db.get_farmer(7)["name"] == "Joan"
+
+
+# --- new plots ---------------------------------------------------------------------
+
+from app.schemas import ParcelDraft  # noqa: E402
+
+
+def test_add_parcel_gets_next_alias_and_is_used_everywhere():
+    alias = db.add_parcel(ParcelDraft(spoken_names=["els cirerers", "cherry block"], crop_key="almond",
+                                      area_ha=1.5, variety="Lauranne", irrigation="regadiu",
+                                      sigpac_ref="25-120-0-0-7-50-1"))
+    assert alias == "P6"
+    p6 = next(p for p in db.get_parcels() if p["alias"] == "P6")
+    assert p6["spoken_names"] == ["els cirerers", "cherry block"] and p6["area_ha"] == 1.5
+    assert (p6["sigpac_ref"], p6["sigpac_poligon"], p6["campaign"]) == ("25-120-0-0-7-50-1", 7, "2026")
+    rid = _draft(parcel_alias="P6")                       # records can point at it right away
+    assert db.get_record(rid).parcel_alias == "P6"
+    assert db.add_parcel(ParcelDraft(spoken_names=["la vinya"], crop_key="almond", area_ha=2)) == "P7"
+
+
+def test_add_parcel_new_crop_needs_its_names():
+    with pytest.raises(ValueError, match="not in the vocabulary"):
+        db.add_parcel(ParcelDraft(spoken_names=["els cirerers"], crop_key="cherry", area_ha=1.5))
+    assert len(db.get_parcels()) == 5                     # nothing half-saved
+    db.add_parcel(ParcelDraft(spoken_names=["els cirerers"], crop_key="cherry", area_ha=1.5,
+                              crop_labels={"en": "Cherry", "ca": "Cirerer", "es": "Cerezo", "ru": "Вишня"}))
+    assert db.label("crop", "cherry", "ca") == "Cirerer"
+
+
+@pytest.mark.parametrize("draft, error", [
+    (dict(spoken_names=[], crop_key="almond", area_ha=1), "spoken_names"),
+    (dict(spoken_names=["x"], crop_key=None, area_ha=1), "crop_key"),
+    (dict(spoken_names=["x"], crop_key="almond", area_ha=None), "area_ha"),
+])
+def test_add_parcel_requires_name_crop_area(draft, error):
+    with pytest.raises(ValueError, match=error):
+        db.add_parcel(ParcelDraft(**draft))
+
+
+def test_add_parcel_rejects_a_name_another_plot_has():
+    with pytest.raises(db.NameTaken) as e:
+        db.add_parcel(ParcelDraft(spoken_names=["new one", "Les Peres"], crop_key="pear", area_ha=1))
+    assert (e.value.name, e.value.alias) == ("Les Peres", "P3")
+    with pytest.raises(db.NameTaken):
+        db.add_parcel(ParcelDraft(spoken_names=["p2"], crop_key="pear", area_ha=1))
+
+
+@pytest.mark.parametrize("bad", [dict(area_ha=0), dict(area_ha=-1), dict(sigpac_ref="25-120-7"),
+                                 dict(irrigation="flood")])
+def test_parcel_draft_validation(bad):
+    with pytest.raises(ValidationError):
+        ParcelDraft(spoken_names=["x"], crop_key="almond", **({"area_ha": 1} | bad))

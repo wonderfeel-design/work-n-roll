@@ -7,11 +7,12 @@ import datetime as dt
 import html
 import logging
 import os
+import re
 import shutil
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -20,7 +21,7 @@ from aiogram.types import (CallbackQuery, FSInputFile, InlineKeyboardButton, Inl
 from aiogram.utils.chat_action import ChatActionSender
 
 from app import DATA_DIR, db, gemma, validator
-from app.schemas import LANGS, Extracted, Record
+from app.schemas import LANGS, Extracted, ParcelDraft, Record
 
 from app.voice import speak, transcribe
 
@@ -53,6 +54,18 @@ class FollowUp(StatesGroup):
 
 class Fix(StatesGroup):
     awaiting = State()    # "awaiting_fix:<id>": data record_id
+
+
+class NewPlot(StatesGroup):
+    describe = State()    # data: draft (ParcelDraft dump or None), rounds
+    confirm = State()     # data: draft
+
+
+# A message (or transcript) starting like this adds a plot instead of logging work.
+NEWPLOT_START = re.compile(
+    r"^\s*(new plot|add (a )?(new )?plot|nova parcel[·.l]*la|afegeix (una )?parcel[·.l]*la|nueva parcela|"
+    r"añade (una )?parcela|новый участок|добав(ь|ить) (новый )?участок)\b[\s:,.—-]*", re.IGNORECASE)
+PLOT_FIELD_LABELS = {"spoken_names": "plot_names", "crop_key": "crop", "area_ha": "area"}
 
 
 # --- helpers -------------------------------------------------------------------
@@ -254,7 +267,8 @@ def welcome_text(chat_id: int, lang: str, name: str) -> str:
     campaign = parcels[0]["campaign"] if parcels else ""
     parcel_lines = [f"{CROP_ICON.get(p['crop_key'], '🌱')} {p['alias']} · {db.label('crop', p['crop_key'], lang)}"
                     f" · {p['area_ha']:.2f} ha" for p in parcels]
-    functions = ["func_voice", "func_confirm"] + (["func_report"] if HAS_REPORT else []) + ["func_help"]
+    functions = (["func_voice", "func_confirm", "func_newplot"] + (["func_report"] if HAS_REPORT else [])
+                 + ["func_help"])
     lines = [db.ui("start_hello", lang).format(name=name, date=date), "",
              db.ui("start_parcels", lang).format(campaign=campaign), *parcel_lines, "",
              db.ui("start_today", lang).format(n=records_today(chat_id)), "",
@@ -409,11 +423,145 @@ async def on_fix(message: Message, bot: Bot, state: FSMContext) -> None:
     await send_card(bot, db.get_record(rec.id))
 
 
+# --- new plots (/newplot) --------------------------------------------------------
+
+def _plot_crop(d: ParcelDraft) -> tuple[str, bool]:
+    """Crop name in the farmer's language, and whether it is new to the vocabulary."""
+    if any(v["type"] == "crop" and v["key"] == d.crop_key for v in db.get_vocabulary()):
+        return db.label("crop", d.crop_key, d.lang), False
+    labels = d.crop_labels.model_dump() if d.crop_labels else {}
+    return labels.get(d.lang) or labels.get("en") or d.crop_key or "—", True
+
+
+def render_plot_card(d: ParcelDraft) -> str:
+    lang, e = d.lang, html.escape
+    crop, new = _plot_crop(d)
+    rows = [("plot_names", ", ".join(d.spoken_names)),
+            ("crop", f"{crop} ({db.ui('new_crop', lang)})" if new else crop),
+            ("area", f"{_num(d.area_ha)} ha")]
+    if d.variety:
+        rows.append(("variety", d.variety))
+    if d.irrigation:
+        rows.append(("plot_irrigation", db.ui("irrigated" if d.irrigation == "regadiu" else "dryland", lang)))
+    lines = [f"<b>{e(db.ui('newplot_title', lang))}</b>"]
+    lines += [f"{e(db.ui(k, lang))}: {e(str(v))}" for k, v in rows]
+    if d.sigpac_ref:
+        lines.append(f"SIGPAC: {e(d.sigpac_ref)}")
+    return "\n".join(lines)
+
+
+def plot_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=db.ui("btn_ok", lang), callback_data="np_ok"),
+        InlineKeyboardButton(text=db.ui("btn_discard", lang), callback_data="np_del"),
+    ]])
+
+
+async def plot_step(bot: Bot, chat_id: int, state: FSMContext, text: str, hint: str | None,
+                    current: ParcelDraft | None, rounds: int) -> None:
+    """Read (more of) a plot description; ask for what is missing, at most MAX_FOLLOWUPS times; then the card."""
+    lang = hint or (current.lang if current else farmer_lang(chat_id))
+    if not text:
+        await say(bot, chat_id, db.ui("not_understood", lang), lang)
+        return
+    async with ChatActionSender.typing(bot=bot, chat_id=chat_id):
+        try:
+            draft = await asyncio.to_thread(gemma.parse_parcel, text, lang, current)
+        except gemma.GemmaError:
+            log.exception("parse_parcel failed")
+            await state.set_state(NewPlot.describe)
+            await state.update_data(draft=current.model_dump() if current else None, rounds=rounds)
+            await say(bot, chat_id, db.ui("not_understood", lang), lang)
+            return
+    if draft.missing_fields:
+        if rounds >= MAX_FOLLOWUPS:
+            await state.clear()
+            await say(bot, chat_id, db.ui("newplot_incomplete", draft.lang), draft.lang)
+            return
+        await state.set_state(NewPlot.describe)
+        await state.update_data(draft=draft.model_dump(), rounds=rounds + 1)
+        fields = ", ".join(db.ui(PLOT_FIELD_LABELS[f], draft.lang) for f in draft.missing_fields)
+        await say(bot, chat_id, db.ui("newplot_missing", draft.lang).format(fields=fields), draft.lang)
+        return
+    await state.set_state(NewPlot.confirm)
+    await state.update_data(draft=draft.model_dump())
+    await bot.send_message(chat_id, render_plot_card(draft), reply_markup=plot_keyboard(draft.lang))
+    crop, _ = _plot_crop(draft)
+    await send_voice(bot, chat_id, f"{db.ui('newplot_title', draft.lang)}: {draft.spoken_names[0]}, {crop}, "
+                                   f"{_num(draft.area_ha)} ha.", draft.lang)
+
+
+async def start_plot(bot: Bot, chat_id: int, state: FSMContext, text: str, hint: str | None) -> None:
+    """Entry for /newplot and for messages that start with "new plot": describe now or ask for it."""
+    if text:
+        await plot_step(bot, chat_id, state, text, hint, None, 0)
+        return
+    lang = hint or farmer_lang(chat_id)
+    await state.set_state(NewPlot.describe)
+    await state.update_data(draft=None, rounds=0)
+    await say(bot, chat_id, db.ui("newplot_ask", lang), lang)
+
+
+@router.message(Command("newplot", "addplot"))
+async def on_newplot(message: Message, bot: Bot, state: FSMContext, command: CommandObject) -> None:
+    await state.clear()
+    await start_plot(bot, message.chat.id, state, (command.args or "").strip(), None)
+
+
+@router.message(NewPlot.describe, F.text | F.voice | F.audio)
+async def on_plot_description(message: Message, bot: Bot, state: FSMContext) -> None:
+    if message.text and message.text.startswith("/"):
+        await state.clear()
+        return
+    data = await state.get_data()
+    text, hint = await message_text(message, bot)
+    current = ParcelDraft.model_validate(data["draft"]) if data.get("draft") else None
+    await plot_step(bot, message.chat.id, state, text, hint, current, data.get("rounds", 0))
+
+
+@router.callback_query(NewPlot.confirm, F.data == "np_ok")
+async def on_plot_ok(cb: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    draft = ParcelDraft.model_validate((await state.get_data())["draft"])
+    await state.clear()
+    await cb.answer()
+    await cb.message.edit_reply_markup(reply_markup=None)
+    chat_id, lang = cb.message.chat.id, draft.lang
+    try:
+        alias = db.add_parcel(draft)
+    except db.NameTaken as e:
+        await say(bot, chat_id, db.ui("newplot_name_taken", lang).format(name=e.name, alias=e.alias), lang)
+        return
+    except ValueError:
+        log.exception("add_parcel rejected the plot")
+        await say(bot, chat_id, db.ui("newplot_incomplete", lang), lang)
+        return
+    await say(bot, chat_id, db.ui("newplot_saved", lang).format(alias=alias), lang)
+
+
+@router.callback_query(NewPlot.confirm, F.data == "np_del")
+async def on_plot_discard(cb: CallbackQuery, state: FSMContext) -> None:
+    lang = ParcelDraft.model_validate((await state.get_data())["draft"]).lang
+    await state.clear()
+    await cb.answer()
+    await cb.message.edit_reply_markup(reply_markup=None)
+    await cb.message.answer(db.ui("discarded", lang))
+
+
+@router.callback_query(F.data.in_({"np_ok", "np_del"}))
+async def on_stale_plot_button(cb: CallbackQuery) -> None:
+    """A plot card from before a restart or after it was answered: nothing to do."""
+    await cb.answer()
+    await cb.message.edit_reply_markup(reply_markup=None)
+
+
 @router.message(F.text | F.voice | F.audio)
 async def on_note(message: Message, bot: Bot, state: FSMContext) -> None:
     if message.text and message.text.startswith("/"):
         return
     text, hint = await message_text(message, bot)
+    if m := NEWPLOT_START.match(text):
+        await start_plot(bot, message.chat.id, state, text[m.end():].strip(), hint)
+        return
     await handle_note(message, bot, state, text, hint)
 
 

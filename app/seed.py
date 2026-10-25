@@ -14,8 +14,7 @@ from psycopg import sql
 from app import ROOT, db
 
 SAMPLE_XLSX = ROOT / "data" / "satech_dun_field_log_sample.xlsx"
-SIGPAC_PARTS = ("sigpac_prov", "sigpac_mun", "sigpac_agregat", "sigpac_zona",
-                "sigpac_poligon", "sigpac_parcela", "sigpac_recinte")
+SIGPAC_PARTS = db.SIGPAC_PARTS
 TABLES = ("corrections", "field_log", "farmers", "parcels", "ui_strings", "vocabulary")
 
 

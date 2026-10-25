@@ -114,7 +114,7 @@ Decided during design on 2026-10-24. The full v1 architecture was cut to fit 3 h
 | 3a | Speech-to-text model | Scribe `scribe_v2` with ~57 keyterms (parcel names, crops, pests) | Keyterms bias recognition toward farm words; kept under 100 to avoid a 20 s minimum charge per note |
 | 4 | Confirmation | The farmer confirms **every** row, then the validator scores it. ≥ 0.80 auto-approves, below goes to the agronomist | Follows the sample sheet's status flow. The read-back is the safety net for transcription errors. 0.80 is a guess to tune |
 | 5 | Timezone | Europe/Madrid | Resolving "ahir" / "ayer" / "вчера" / "yesterday" to a date |
-| 6 | Parcels | Seed the 5 sample parcels from `Parcels_DUN`; no adding parcels by voice | The DUN parcel list is filled once per farm. The bot needs it to map spoken names to P1–P5 |
+| 6 | Parcels | The 5 DUN parcels are seeded from `Parcels_DUN`; new plots are added by the farmer in Telegram (`/newplot`, or a message starting "new plot …", by voice or text, with a confirm card) or in Epic Reporting (＋ Plot). One crop per plot; a crop not yet in the vocabulary is added with its name in EN/CA/ES/RU | The bot maps spoken names to plots, so the list has to grow with the farm. Plot names must be unique across plots; aliases are assigned P6, P7, … |
 | 7 | Users | One farmer for now | MVP scope. The `farmers` table already allows more later |
 | 8 | Sample workbook | Format reference only. Seeding loads Parcels_DUN, Vocabulary and UI_Strings; Field_Log and Corrections start empty | The rows are fictional examples |
 | 8a | Corrections | Strict: foreign key to the record, required reason, append-only, records never deleted | Corrections are the training signal for the judge; they must be trustworthy |

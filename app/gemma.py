@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from app import DATA_DIR, ROOT
 from app import db
-from app.schemas import EDITABLE_FIELDS, Extracted, ExtractionResult
+from app.schemas import EDITABLE_FIELDS, PARCEL_REQUIRED, Extracted, ExtractionResult, ParcelDraft
 from app.validator import missing_fields
 
 log = logging.getLogger(__name__)
@@ -233,3 +233,32 @@ def merge(current: Extracted, text: str) -> Extracted:
 def changed_fields(before: Extracted, after: Extracted) -> dict:
     """Editable fields whose value differs (what update_field should be called with)."""
     return {f: getattr(after, f) for f in EDITABLE_FIELDS if getattr(before, f) != getattr(after, f)}
+
+
+# --- new plots (/newplot) --------------------------------------------------------
+
+def build_parcel_prompt(text: str, lang_hint: str | None, current: ParcelDraft | None) -> str:
+    crops = "\n".join(f"- {v['key']}: {v['en']}" for v in db.get_vocabulary() if v["type"] == "crop")
+    return (PROMPTS / "parcel.md").read_text(encoding="utf-8").format(
+        lang_hint=lang_hint or "unknown", parcels=_parcels_block(), crops=crops,
+        current=current.model_dump_json(exclude={"missing_fields"}) if current else "null", text=text)
+
+
+def parse_parcel(text: str, lang_hint: str | None, current: ParcelDraft | None = None) -> ParcelDraft:
+    """Farmer's description of a new plot (or an answer adding to `current`) → ParcelDraft.
+
+    Keeps what `current` already had when the model drops it; drops crop_labels for a crop the
+    vocabulary already has; missing_fields is recomputed here, not trusted from the model.
+    """
+    draft = call(build_parcel_prompt(text, lang_hint, current), ParcelDraft, "parcel")
+    data = draft.model_dump()
+    if current is not None:
+        for field, value in current.model_dump(exclude={"missing_fields", "lang"}).items():
+            if not data.get(field) and value:
+                data[field] = value
+        data["lang"] = current.lang
+    known = {v["key"] for v in db.get_vocabulary() if v["type"] == "crop"}
+    if data.get("crop_key") in known:
+        data["crop_labels"] = None
+    data["missing_fields"] = [f for f in PARCEL_REQUIRED if not data.get(f)]
+    return ParcelDraft.model_validate(data)
