@@ -45,6 +45,7 @@ def test_records_are_enriched(client):
     assert r["sigpac_ref"] == "25-233-0-0-3-102-1"
     assert (r["crop_key"], r["crop_ca"], r["crop_en"]) == ("almond", "Ametller", "Almond")
     assert (r["activity_ca"], r["activity_en"]) == ("Tractament fitosanitari", "Phytosanitary treatment")
+    assert (r["crop_es"], r["activity_es"]) == ("Almendro", "Tratamiento fitosanitario")
     assert r["target_pest_en"] == "Fungal diseases (general)"
     assert r["dose_per_ha"] == round(40 / 4.2, 3)  # no area spoken: the parcel's area is used
     assert r["transcript_original"].startswith("Catorce")

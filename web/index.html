@@ -192,7 +192,7 @@
     <span class="live" id="live"></span>
     <button class="btn" id="review" aria-pressed="false"></button>
     <span class="seg" role="group" aria-label="Language">
-      <button class="btn" data-lang="ca">CA</button><button class="btn" data-lang="en">EN</button>
+      <button class="btn" data-lang="ca">CA</button><button class="btn" data-lang="es">ES</button><button class="btn" data-lang="en">EN</button>
     </span>
     <button class="btn" id="plots-open" type="button"></button>
     <a class="btn primary" id="report" href="api/report.xlsx" download></a>
@@ -270,6 +270,24 @@ const T = {
               target_pest_key: "Plaga / objectiu", quantity: "Quantitat", unit: "Unitat", area_ha: "Superfície (ha)",
               notes_ca: "Notes (CA)", notes_en: "Notes (EN)" },
   },
+  es: {
+    subtitle: "Epic Reporting", live: "en directo", paused: "en pausa (corrigiendo)", offline: "sin conexión",
+    review: "Solo pendientes", report: "Descarga el informe", plots: "Parcelas", plotsBtn: "＋ Parcela", close: "Cerrar", addPlotTitle: "Añade una parcela", addPlot: "Añade la parcela", plotNames: "Nombres (separados por comas, como los dice el agricultor)", crop: "Cultivo", area: "Superficie (ha)", variety: "Variedad", irrigation: "Riego", irrigated: "regadío", dryland: "secano", newCrop: "Cultivo nuevo…", cropNames: "Nombre del cultivo: EN obligatorio", sigpac: "Referencia SIGPAC (opcional)", plotAdded: "añadida", plotCols: ["Parcela", "Nombres", "Cultivo", "Superficie", "Riego"], needNames: "Hacen falta un nombre, el cultivo y la superficie.", empty: "Todavía no hay registros. Envía una nota de voz al bot.",
+    emptyReview: "Nada pendiente de revisión.", corrTitle: "Lo que aprende el modelo", noCorr: "Todavía no hay correcciones.",
+    cols: ["Fecha", "Agricultor", "Parcela", "Cultivo", "Actividad", "Producto", "Cantidad", "Dosis/ha",
+           "Estado", "Juez", "Transcripción original"],
+    approve: "Aprueba", correct: "Corrige", field: "Campo", value: "Valor nuevo", reason: "Motivo (obligatorio)",
+    save: "Guarda", cancel: "Cancela", was: "Valor actual", reasonNeeded: "Hace falta un motivo: es lo que aprende el modelo.",
+    approved: "aprobado", corrected: "corregido", by: "por",
+    voice: "Voz", ownVoices: "Tus voces", talk: "Habla con el asistente", hint: "Pulsa y pregunta: «¿Cuánto cobre he usado en los almendros?»",
+    listening: "Te escucho…", thinking: "Consultando el registro…", noSpeech: "No te he oído. Vuelve a pulsar para hablar.",
+    micDenied: "Hace falta permiso para el micrófono.",
+    status: { draft: "borrador", farmer_confirmed: "confirmado por el agricultor", auto_approved: "aprobado automáticamente",
+              needs_review: "pendiente de revisión", validated: "validado", corrected: "corregido", discarded: "descartado" },
+    fields: { date: "Fecha", parcel_alias: "Parcela", activity_key: "Actividad", product: "Producto",
+              target_pest_key: "Plaga / objetivo", quantity: "Cantidad", unit: "Unidad", area_ha: "Superficie (ha)",
+              notes_ca: "Notas (CA)", notes_en: "Notas (EN)" },
+  },
   en: {
     subtitle: "Epic Reporting", live: "live", paused: "paused (correcting)", offline: "offline",
     review: "Needs review only", report: "Download report", plots: "Plots", plotsBtn: "＋ Plot", close: "Close", addPlotTitle: "Add a plot", addPlot: "Add plot", plotNames: "Names (comma-separated, as the farmer says them)", crop: "Crop", area: "Area (ha)", variety: "Variety", irrigation: "Irrigation", irrigated: "irrigated", dryland: "dryland", newCrop: "New crop…", cropNames: "Crop name: EN required", sigpac: "SIGPAC reference (optional)", plotAdded: "added", plotCols: ["Plot", "Names", "Crop", "Area", "Irrigation"], needNames: "A name, the crop and the area are required.", empty: "No records yet. Send a voice note to the bot.",
@@ -299,10 +317,11 @@ const POLL_MS = 2000;
 const state = { lang: "ca", reviewOnly: false, records: [], corrections: [], parcels: [], vocab: [],
                 seen: null, openForm: null };
 try { state.lang = localStorage.getItem("fv-lang") || "ca"; } catch {}
+if (!T[state.lang]) state.lang = "ca";
 const t = () => T[state.lang];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const num = n => n == null ? "" : (Math.round(n * 100) / 100).toLocaleString(state.lang === "ca" ? "ca" : "en");
+const num = n => n == null ? "" : (Math.round(n * 100) / 100).toLocaleString(state.lang);
 const label = (r, base) => r[`${base}_${state.lang}`] ?? r[`${base}_en`] ?? "";
 
 function toast(msg) {

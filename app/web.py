@@ -77,7 +77,7 @@ class _Lookups:
 
     def names(self, type: str, key: Optional[str]) -> dict:
         v = self.vocab.get((type, key)) or self.vocab.get(("any", key)) or {}
-        return {"ca": v.get("ca") or key, "en": v.get("en") or key}
+        return {lang: v.get(lang) or v.get("en") or key for lang in ("ca", "es", "en")}
 
     def enrich(self, rec: Record) -> dict:
         out = rec.model_dump()
@@ -90,9 +90,10 @@ class _Lookups:
             record_id=f"R{rec.id:04d}",
             sigpac_ref=parcel.get("sigpac_ref"),
             crop_key=crop_key,
-            crop_ca=crop["ca"], crop_en=crop["en"],
-            activity_ca=activity["ca"], activity_en=activity["en"],
+            crop_ca=crop["ca"], crop_es=crop["es"], crop_en=crop["en"],
+            activity_ca=activity["ca"], activity_es=activity["es"], activity_en=activity["en"],
             target_pest_ca=pest["ca"] if rec.target_pest_key else None,
+            target_pest_es=pest["es"] if rec.target_pest_key else None,
             target_pest_en=pest["en"] if rec.target_pest_key else None,
             dose_per_ha=round(rec.quantity / area, 3) if rec.quantity is not None and area else None,
         )
